@@ -18,6 +18,14 @@ def _propagate_error_phase(errb0, erra0, dphi, bet0, alf0):
     ) / (2 * np.pi)
 
 
+def _propagate_error_dispersion(std_D0, bet0, bets, dphi, alf0):
+    return np.abs(
+        std_D0
+        * np.sqrt(bets / bet0)
+        * (np.cos(2 * np.pi * dphi) + alf0 * np.sin(2 * np.pi * dphi))
+    )
+
+
 def _get_tw_phase(tw, loc0, loc, plane):
     ph = (
         getattr(tw.rows[loc[0]], f"mu{plane}")
@@ -198,7 +206,12 @@ class Segment:
         }
         return res
 
-    def get_phase_diffs(self, bpms_x=None, bpms_y=None, fmt="bb") -> xt.TwissTable:
+    def get_phase_diffs(
+        self, bpms_x=None, bpms_y=None, fmt="bb"
+    ) -> tuple[xt.TwissTable, xt.TwissTable]:
+        resx = {}
+        resy = {}
+
         tw = self.twiss_sbs()
 
         if bpms_x is None and bpms_y is None:
@@ -273,33 +286,27 @@ class Segment:
         else:
             print(f"Wrong {fmt=}. Choose bb or omc")
 
-        # TODO: Deal with diff bpms in diff planes
-        res = xt.TwissTable(
-            {
-                "name": bpms_x[0],
-                "s": tw.rows[bpms_x[0]].s,
-                "mux": tw.rows[bpms_x[0]].mux,
-                "muy": tw.rows[bpms_y[0]].muy,
-                "mux2": mux,
-                "muy2": muy,
-                "dmux": mux_diff,
-                "dmuy": muy_diff,
-                "dmux_err": mux_diff_err,
-                "dmuy_err": muy_diff_err,
-            }
-        )
-        return res
+        resx["name"] = bpms_x[0]
+        resx["s"] = tw.rows[bpms_x[0]].s
+        resx["mux"] = tw.rows[bpms_x[0]].mux
+        resx["mux2"] = mux
+        resx["dmux"] = mux_diff
+        resx["dmux_err"] = mux_diff_err
 
-    def get_disp_diffs(self, bpms_x=None, bpms_y=None):
+        resy["name"] = bpms_y[0]
+        resy["s"] = tw.rows[bpms_y[0]].s
+        resy["muy"] = tw.rows[bpms_y[0]].muy
+        resy["muy2"] = muy
+        resy["dmuy"] = muy_diff
+        resy["dmuy_err"] = muy_diff_err
+
+        return (xt.TwissTable(resx), xt.TwissTable(resy))
+
+    def get_disp_diffs(
+        self, bpms_x=None, bpms_y=None
+    ) -> tuple[xt.TwissTable, xt.TwissTable]:
         resx = {}
         resy = {}
-
-        def _propagate_error_dispersion(std_D0, bet0, bets, dphi, alf0):
-            return np.abs(
-                std_D0
-                * np.sqrt(bets / bet0)
-                * (np.cos(2 * np.pi * dphi) + alf0 * np.sin(2 * np.pi * dphi))
-            )
 
         tw = self.twiss_sbs()
 
