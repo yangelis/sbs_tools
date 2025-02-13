@@ -1,62 +1,34 @@
 import xtrack as xt
 import numpy as np
 from .readers import OptData
-
-
-def _propagate_error_phase(errb0, erra0, dphi, bet0, alf0):
-    return np.sqrt(
-        (
-            (
-                (1 / 2.0 * np.cos(4 * np.pi * dphi) * alf0 / bet0)
-                - (1 / 2.0 * np.sin(4 * np.pi * dphi) / bet0)
-                - (1 / 2.0 * alf0 / bet0)
-            )
-            * errb0
-        )
-        ** 2
-        + ((-(1 / 2.0 * np.cos(4 * np.pi * dphi)) + (1 / 2.0)) * erra0) ** 2
-    ) / (2 * np.pi)
-
-
-def _propagate_error_dispersion(std_D0, bet0, bets, dphi, alf0):
-    return np.abs(
-        std_D0
-        * np.sqrt(bets / bet0)
-        * (np.cos(2 * np.pi * dphi) + alf0 * np.sin(2 * np.pi * dphi))
-    )
-
-
-def _get_tw_phase(tw, loc0, loc, plane):
-    ph = (
-        getattr(tw.rows[loc[0]], f"mu{plane}")
-        - getattr(tw.rows[loc0[0]], f"mu{plane}")[0]
-    ) % 1
-    return ph
-
-
-def _get_mes_phase(mes_all, loc0, loc, plane):
-    mes = (
-        getattr(mes_all.loc[loc[1]], f"PHASE{plane.upper()}").values
-        - getattr(mes_all.loc[loc0[1]], f"PHASE{plane.upper()}")
-    ) % 1
-    return mes
-
-
-def _get_mu_diff(tw, mes_all, loc0, loc, plane):
-    mdl_mu = _get_tw_phase(tw, loc0, loc, plane)
-    mes_mu = _get_mes_phase(mes_all, loc0, loc, plane)
-    mu_diff = (mes_mu - mdl_mu) % 1
-    mu_diff = np.where(mu_diff > 0.5, mu_diff - 1, mu_diff)
-    return mu_diff
+from .utils import _get_mu_diff, _propagate_error_phase, _propagate_error_dispersion
 
 
 class Segment:
 
-    def __init__(self, line: xt.Line, start_bpm: str, end_bpm: str, mes: OptData):
-        self.line = line
+    def __init__(
+        self, line: xt.Line, start_bpm: str, end_bpm: str, mes: OptData
+    ) -> None:
+        self.line = line.copy()
         self.start_bpm = start_bpm
         self.end_bpm = end_bpm
         self.mes = mes
+
+        init, _ = self.get_tw_init()
+        self.init = init
+
+        # Used to save and restore knobs
+        self.original_vals = {}
+
+    def activate_knobs(self, knobs, values) -> None:
+
+        for kn, kv in zip(knobs, values):
+            self.original_vals[str(kn)] = self.line.varval[str(kn)]
+            self.line.vars[str(kn)] += kv
+
+    def restore_knobs(self, knobs) -> None:
+        for kn in knobs:
+            self.line.vars[str(kn)] = self.original_vals[str(kn)]
 
     def get_R_terms(self, betx, bety, alfx, alfy, f1001r, f1001i, f1010r, f1010i):
         ga11 = 1 / np.sqrt(betx)
@@ -153,8 +125,9 @@ class Segment:
         """
         Get twiss for the segment
         """
-        init, Rmat = self.get_tw_init()
-        sbs_tw = self.line.twiss(start=self.start_bpm, end=self.end_bpm, init=init)
+        if self.init is None:
+            self.init, Rmat = self.get_tw_init()
+        sbs_tw = self.line.twiss(start=self.start_bpm, end=self.end_bpm, init=self.init)
 
         return sbs_tw
 
@@ -215,7 +188,7 @@ class Segment:
         tw = self.twiss_sbs()
 
         if bpms_x is None and bpms_y is None:
-            s_bpms = self.get_common_bpms(attr="total_phase_")
+            s_bpms = self.get_s_and_bpms(attr="total_phase_")
             bpms_x = s_bpms["bpms_x"]
             bpms_y = s_bpms["bpms_y"]
 
@@ -349,3 +322,101 @@ class Segment:
         )
 
         return (xt.TwissTable(resx), xt.TwissTable(resy))
+
+    def plot_phase_diff(self, bpms_x=None, bpms_y=None, tw_cor=None):
+        import matplotlib.pyplot as plt
+
+        if bpms_x is None and bpms_y is None:
+            bpms_names = self.get_s_and_bpms(attr="total_phase_")
+            bpms_x = bpms_names["bpms_x"]
+            bpms_y = bpms_names["bpms_y"]
+
+        bpms = {"x": bpms_x, "y": bpms_y}
+
+        bpms_common = np.intersect1d(bpms_x[0], bpms_y[0])
+        tw_sbs = self.twiss_sbs()
+        tw_phase = self.get_phase_diffs(bpms_x=bpms_x, bpms_y=bpms_y, fmt="bb")
+
+        fig, axs = plt.subplots(
+            3, 1, figsize=(11, 11), sharex=True, height_ratios=[0.5, 1, 1], dpi=300
+        )
+        axs[0].plot(
+            tw_sbs.rows[bpms_x[0]].s,
+            tw_sbs.rows[bpms_x[0]].x * 1e3,
+            marker="o",
+            ls="-",
+            ms=4,
+            label="x",
+            color="black",
+        )
+        if isinstance(tw_cor, xt.TwissTable):
+            axs[0].plot(
+                tw_cor.rows[bpms_x[0]].s,
+                tw_cor.rows[bpms_x[0]].x * 1e3,
+                marker="o",
+                ls="-",
+                ms=4,
+                label="x",
+                color="red",
+            )
+        elif isinstance(tw_cor, dict):
+            for nlabel, twc in tw_cor.items():
+                axs[0].plot(
+                    twc.rows[bpms_x[0]].s,
+                    twc.rows[bpms_x[0]].x * 1e3,
+                    marker="o",
+                    ls="-",
+                    ms=4,
+                    label=f"{nlabel}, x",
+                )
+
+        axs[0].set_ylabel("co [mm]")
+
+        axs_t = axs[0].twiny()
+        axs_t.set_xticks(
+            tw_sbs.rows[bpms_common].s,
+            tw_sbs.rows[bpms_common].name,
+            rotation="vertical",
+        )
+
+        axs_t.set_xlim(axs[0].get_xlim()[0], axs[0].get_xlim()[1])
+
+        fig.subplots_adjust(hspace=0)
+        for i, PLANE in enumerate(["x", "y"]):
+            axs[i + 1].errorbar(
+                tw_phase[i].s,
+                getattr(tw_phase[i], f"dmu{PLANE}"),
+                yerr=getattr(tw_phase[i], f"dmu{PLANE}_err"),
+                marker="o",
+                ls="-",
+                label="Measurement",
+                color="black",
+            )
+            if isinstance(tw_cor, xt.TwissTable):
+                axs[i + 1].errorbar(
+                    tw_cor.rows[bpms[PLANE][0]].s,
+                    -getattr(tw_sbs.rows[bpms[PLANE][0]], f"mu{PLANE.lower()}")
+                    + getattr(tw_cor.rows[bpms[PLANE][0]], f"mu{PLANE.lower()}"),
+                    marker="o",
+                    ls="-",
+                    label="Arc Correction",
+                    color="red",
+                )
+            elif isinstance(tw_cor, dict):
+                for nlabel, twc in tw_cor.items():
+                    axs[i + 1].errorbar(
+                        twc.rows[bpms[PLANE][0]].s,
+                        -getattr(tw_sbs.rows[bpms[PLANE][0]], f"mu{PLANE.lower()}")
+                        + getattr(twc.rows[bpms[PLANE][0]], f"mu{PLANE.lower()}"),
+                        marker="o",
+                        ls="-",
+                        label=nlabel,
+                    )
+
+            axs[i + 1].set_ylabel(rf"$\Delta\phi_{PLANE}\ [2\pi]$")
+
+        for i in range(0, 3):
+            axs[i].grid()
+            axs[i].legend()
+            axs[i].set_xlabel(r"$s [m]$")
+        plt.show()
