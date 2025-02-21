@@ -124,7 +124,15 @@ class Segment:
         )
         return init, R_mat
 
-    def twiss_sbs(self):
+    def twiss(self, mode="front") -> xt.TwissTable | None:
+        if mode == "front":
+            return self.twiss_sbs()
+        elif mode == "back":
+            return self.backtwiss_sbs()
+        else:
+            print("Available modes are 'front' and 'back'")
+
+    def twiss_sbs(self) -> xt.TwissTable:
         """
         Get twiss for the segment
         """
@@ -136,7 +144,7 @@ class Segment:
 
         return sbs_tw
 
-    def backtwiss_sbs(self):
+    def backtwiss_sbs(self) -> xt.TwissTable:
         """
         Get twiss for the segment
         """
@@ -436,7 +444,107 @@ class Segment:
 
         bpms_common = np.intersect1d(bpms_x[0], bpms_y[0])
         tw_sbs = self.twiss_sbs()
-        tw_phase = self.get_phase_diffs(bpms_x=bpms_x, bpms_y=bpms_y, fmt="bb")
+        tw_phase, tw_phase_back = self.get_phase_diffs(
+            bpms_x=bpms_x, bpms_y=bpms_y, fmt="bb"
+        )
+
+        fig, axs = plt.subplots(
+            3, 1, figsize=(11, 11), sharex=True, height_ratios=[0.5, 1, 1], dpi=300
+        )
+        axs[0].plot(
+            tw_sbs.rows[bpms_x[0]].s,
+            tw_sbs.rows[bpms_x[0]].x * 1e3,
+            marker="o",
+            ls="-",
+            ms=4,
+            label="x",
+            color="black",
+        )
+        if isinstance(tw_cor, xt.TwissTable):
+            axs[0].plot(
+                tw_cor.rows[bpms_x[0]].s,
+                tw_cor.rows[bpms_x[0]].x * 1e3,
+                marker="o",
+                ls="-",
+                ms=4,
+                label="x",
+                color="red",
+            )
+        elif isinstance(tw_cor, dict):
+            for nlabel, twc in tw_cor.items():
+                axs[0].plot(
+                    twc.rows[bpms_x[0]].s,
+                    twc.rows[bpms_x[0]].x * 1e3,
+                    marker="o",
+                    ls="-",
+                    ms=4,
+                    label=f"{nlabel}, x",
+                )
+
+        axs[0].set_ylabel("co [mm]")
+
+        axs_t = axs[0].twiny()
+        axs_t.set_xticks(
+            tw_sbs.rows[bpms_common].s,
+            tw_sbs.rows[bpms_common].name,
+            rotation="vertical",
+        )
+
+        axs_t.set_xlim(axs[0].get_xlim()[0], axs[0].get_xlim()[1])
+
+        fig.subplots_adjust(hspace=0)
+        for i, PLANE in enumerate(["x", "y"]):
+            axs[i + 1].errorbar(
+                tw_phase[i].s,
+                getattr(tw_phase[i], f"dmu{PLANE}"),
+                yerr=getattr(tw_phase[i], f"dmu{PLANE}_err"),
+                marker="o",
+                ls="-",
+                label="Measurement",
+                color="black",
+            )
+            if isinstance(tw_cor, xt.TwissTable):
+                axs[i + 1].errorbar(
+                    tw_cor.rows[bpms[PLANE][0]].s,
+                    -getattr(tw_sbs.rows[bpms[PLANE][0]], f"mu{PLANE.lower()}")
+                    + getattr(tw_cor.rows[bpms[PLANE][0]], f"mu{PLANE.lower()}"),
+                    marker="o",
+                    ls="-",
+                    label="Arc Correction",
+                    color="red",
+                )
+            elif isinstance(tw_cor, dict):
+                for nlabel, twc in tw_cor.items():
+                    axs[i + 1].errorbar(
+                        twc.rows[bpms[PLANE][0]].s,
+                        -getattr(tw_sbs.rows[bpms[PLANE][0]], f"mu{PLANE.lower()}")
+                        + getattr(twc.rows[bpms[PLANE][0]], f"mu{PLANE.lower()}"),
+                        marker="o",
+                        ls="-",
+                        label=nlabel,
+                    )
+
+            axs[i + 1].set_ylabel(rf"$\Delta\phi_{PLANE}\ [2\pi]$")
+
+        for i in range(0, 3):
+            axs[i].grid()
+            axs[i].legend()
+            axs[i].set_xlabel(r"$s [m]$")
+        plt.show()
+
+    def plot_phase_back_diff(self, bpms_x=None, bpms_y=None, tw_cor=None):
+        import matplotlib.pyplot as plt
+
+        if bpms_x is None and bpms_y is None:
+            bpms_names = self.get_s_and_bpms(attr="total_phase_")
+            bpms_x = bpms_names["bpms_x"]
+            bpms_y = bpms_names["bpms_y"]
+
+        bpms = {"x": bpms_x, "y": bpms_y}
+
+        bpms_common = np.intersect1d(bpms_x[0], bpms_y[0])
+        tw_sbs = self.backtwiss_sbs()
+        _, tw_phase = self.get_phase_diffs(bpms_x=bpms_x, bpms_y=bpms_y, fmt="bb")
 
         fig, axs = plt.subplots(
             3, 1, figsize=(11, 11), sharex=True, height_ratios=[0.5, 1, 1], dpi=300
