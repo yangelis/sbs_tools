@@ -10,11 +10,12 @@ def create_response(
     segment: Segment,
     magnet_names: Sequence[str],
     bpms: np.ndarray,
-    nknobs: int,
     attr: str = "k1",
     delta_k: float = 2e-5,
     mode="front",
 ) -> dict[str, np.ndarray]:
+
+    nknobs = len(magnet_names)
 
     betax = np.zeros(shape=(bpms.shape[1], nknobs), dtype=np.float64)
     betay = np.zeros(shape=(bpms.shape[1], nknobs), dtype=np.float64)
