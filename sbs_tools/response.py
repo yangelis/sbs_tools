@@ -13,6 +13,7 @@ def create_response(
     nknobs: int,
     attr: str = "k1",
     delta_k: float = 2e-5,
+    mode="front",
 ) -> dict[str, np.ndarray]:
 
     betax = np.zeros(shape=(bpms.shape[1], nknobs), dtype=np.float64)
@@ -27,13 +28,13 @@ def create_response(
     dmuxs = np.zeros(shape=(bpms.shape[1], nknobs), dtype=np.float64)
     dmuys = np.zeros(shape=(bpms.shape[1], nknobs), dtype=np.float64)
 
-    tw_sbs = segment.twiss_sbs()
+    tw_sbs = segment.twiss(mode=mode)
 
     for i, mname in enumerate(magnet_names):
         original_val = getattr(segment.line.element_dict[mname], attr)
         setattr(segment.line.element_dict[mname], attr, original_val + delta_k)
 
-        tw_dk = segment.twiss_sbs()
+        tw_dk = segment.twiss(mode=mode)
 
         setattr(segment.line.element_dict[mname], attr, original_val)
 
@@ -63,6 +64,7 @@ def create_knob_response(
     knob_names: Sequence[str],
     bpms: np.ndarray,
     delta: float = 2e-5,
+    mode="front",
 ) -> dict[str, np.ndarray]:
 
     nknobs = len(knob_names)
@@ -79,14 +81,14 @@ def create_knob_response(
     dmuxs = np.zeros(shape=(bpms.shape[1], nknobs), dtype=np.float64)
     dmuys = np.zeros(shape=(bpms.shape[1], nknobs), dtype=np.float64)
 
-    tw_sbs = segment.twiss_sbs()
+    tw_sbs = segment.twiss(mode=mode)
 
     for i, kname in enumerate(knob_names):
         # NOTE: str(kname) instead of kname to avoid np.str_
         original_val = segment.line.varval[str(kname)]
         segment.line.vars[str(kname)] += delta
 
-        tw_dk = segment.twiss_sbs()
+        tw_dk = segment.twiss(mode=mode)
 
         segment.line.vars[str(kname)] -= delta
 
@@ -108,7 +110,11 @@ def create_knob_response(
 
 
 def tw_strengths_deltak(
-    sbs: Segment, magnet_names: Sequence[str], dks: Sequence[float], attr: str = "k1"
+    sbs: Segment,
+    magnet_names: Sequence[str],
+    dks: Sequence[float],
+    mode="front",
+    attr: str = "k1",
 ) -> xt.TwissTable:
 
     original_values = []
@@ -117,7 +123,7 @@ def tw_strengths_deltak(
         original_values.append(old_val)
         setattr(sbs.line.element_dict[imq], attr, old_val + dks[i])
 
-    tw_dk = sbs.twiss_sbs()
+    tw_dk = sbs.twiss(mode=mode)
 
     for i, imq in enumerate(magnet_names):
         setattr(sbs.line.element_dict[imq], attr, original_values[i])
