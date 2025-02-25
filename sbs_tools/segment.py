@@ -1,7 +1,10 @@
 import xtrack as xt
 import numpy as np
+import matplotlib.pyplot as plt
 from .readers import OptData
 from .utils import _get_mu_diff, _propagate_error_phase, _propagate_error_dispersion
+
+from typing import Sequence
 
 
 class Segment:
@@ -22,13 +25,13 @@ class Segment:
         # Used to save and restore knobs
         self.original_vals = {}
 
-    def activate_knobs(self, knobs, values) -> None:
+    def activate_knobs(self, knobs: Sequence[str], values: Sequence[float]) -> None:
 
         for kn, kv in zip(knobs, values):
             self.original_vals[str(kn)] = self.line.varval[str(kn)]
             self.line.vars[str(kn)] += kv
 
-    def restore_knobs(self, knobs) -> None:
+    def restore_knobs(self, knobs: Sequence[str]) -> None:
         for kn in knobs:
             self.line.vars[str(kn)] = self.original_vals[str(kn)]
 
@@ -64,7 +67,7 @@ class Segment:
         R = np.transpose(np.sqrt(1 + r) * jCj)
         return np.ravel(R)
 
-    def get_tw_init(self, at_ele) -> tuple[xt.TwissInit, np.ndarray]:
+    def get_tw_init(self, at_ele: str) -> tuple[xt.TwissInit, np.ndarray]:
         """
         Return the twiss init at 'at_ele' element
         and the coupling matrix, derived from the measurement
@@ -124,7 +127,7 @@ class Segment:
         )
         return init, R_mat
 
-    def twiss(self, mode="front") -> xt.TwissTable | None:
+    def twiss(self, mode: str = "front") -> xt.TwissTable | None:
         if mode == "front":
             return self.twiss_sbs()
         elif mode == "back":
@@ -156,7 +159,7 @@ class Segment:
 
         return sbs_tw
 
-    def get_common_bpms(self, attr="total_phase_"):
+    def get_common_bpms(self, attr: str = "total_phase_"):
         tw_sbs = self.twiss_sbs()
         tw_sbs_bpms = tw_sbs.rows["bpm.*"]
         bpms_names = np.array([[b, b.upper()] for b in tw_sbs_bpms.name]).T
@@ -169,7 +172,7 @@ class Segment:
         bpms_names = np.array([[b.lower(), b] for b in common_bpms]).T
         return bpms_names
 
-    def get_s_and_bpms(self, attr="total_phase_"):
+    def get_s_and_bpms(self, attr: str = "total_phase_"):
         tw_sbs = self.twiss_sbs()
         tw_sbs_bpms = tw_sbs.rows["bpm.*"]
         bpms_names = np.array([[b, b.upper()] for b in tw_sbs_bpms.name]).T
@@ -205,8 +208,10 @@ class Segment:
         return res
 
     def get_phase_diffs(
-        self, bpms_x=None, bpms_y=None, fmt="bb"
-    ) -> tuple[xt.TwissTable, xt.TwissTable]:
+        self, bpms_x=None, bpms_y=None, fmt: str = "bb"
+    ) -> tuple[
+        tuple[xt.TwissTable, xt.TwissTable], tuple[xt.TwissTable, xt.TwissTable]
+    ]:
         tw_front = self.twiss_sbs()
         tw_back = self.backtwiss_sbs()
 
@@ -433,7 +438,6 @@ class Segment:
         return (xt.TwissTable(resx), xt.TwissTable(resy))
 
     def plot_phase_diff(self, bpms_x=None, bpms_y=None, tw_cor=None):
-        import matplotlib.pyplot as plt
 
         if bpms_x is None and bpms_y is None:
             bpms_names = self.get_s_and_bpms(attr="total_phase_")
@@ -533,7 +537,6 @@ class Segment:
         plt.show()
 
     def plot_phase_back_diff(self, bpms_x=None, bpms_y=None, tw_cor=None):
-        import matplotlib.pyplot as plt
 
         if bpms_x is None and bpms_y is None:
             bpms_names = self.get_s_and_bpms(attr="total_phase_")
@@ -625,6 +628,60 @@ class Segment:
             axs[i + 1].set_ylabel(rf"$\Delta\phi_{PLANE}\ [2\pi]$")
 
         for i in range(0, 3):
+            axs[i].grid()
+            axs[i].legend()
+            axs[i].set_xlabel(r"$s [m]$")
+        plt.show()
+
+    def plot_phase_diff_fb(self, bpms_x=None, bpms_y=None):
+
+        if bpms_x is None and bpms_y is None:
+            bpms_names = self.get_s_and_bpms(attr="total_phase_")
+            bpms_x = bpms_names["bpms_x"]
+            bpms_y = bpms_names["bpms_y"]
+
+        bpms_common = np.intersect1d(bpms_x[0], bpms_y[0])
+        tw_sbs = self.twiss_sbs()
+        tw_phase, tw_phase_back = self.get_phase_diffs(
+            bpms_x=bpms_x, bpms_y=bpms_y, fmt="bb"
+        )
+
+        fig, axs = plt.subplots(2, 1, figsize=(14, 10.5), sharex=True, dpi=300)
+
+        fig.subplots_adjust(hspace=0)
+        for i, PLANE in enumerate(["x", "y"]):
+            axs[i].errorbar(
+                tw_phase[i].s,
+                getattr(tw_phase[i], f"dmu{PLANE}"),
+                yerr=getattr(tw_phase[i], f"dmu{PLANE}_err"),
+                marker="o",
+                ls="-",
+                label="Measurement, Front Prop.",
+                color="black",
+            )
+
+            axs[i].errorbar(
+                tw_phase_back[i].s,
+                getattr(tw_phase_back[i], f"dmu{PLANE}"),
+                yerr=getattr(tw_phase_back[i], f"dmu{PLANE}_err"),
+                marker="o",
+                ls="-",
+                label="Measurement, Back Prop.",
+                color="red",
+            )
+
+            axs[i].set_ylabel(rf"$\Delta\phi_{PLANE}\ [2\pi]$")
+
+        axs_t = axs[0].twiny()
+        axs_t.set_xticks(
+            tw_sbs.rows[bpms_common].s,
+            tw_sbs.rows[bpms_common].name,
+            rotation="vertical",
+        )
+
+        axs_t.set_xlim(axs[0].get_xlim()[0], axs[0].get_xlim()[1])
+
+        for i in range(0, 2):
             axs[i].grid()
             axs[i].legend()
             axs[i].set_xlabel(r"$s [m]$")

@@ -1,5 +1,6 @@
 import numpy as np
 from xtrack import TwissTable
+from typing import Sequence
 
 
 def _propagate_error_phase(errb0, erra0, dphi, bet0, alf0):
@@ -49,7 +50,12 @@ def _get_mu_diff(tw, mes_all, loc0, loc, plane):
     return mu_diff
 
 
-def merge_tw(tw1, tw2, var_names1, var_names2):
+def merge_tw(
+    tw1: TwissTable,
+    tw2: TwissTable,
+    var_names1: Sequence[str],
+    var_names2: Sequence[str],
+):
     res = {}
     res["name"] = tw1.name
     res["s"] = tw1.s
