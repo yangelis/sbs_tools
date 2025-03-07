@@ -452,7 +452,7 @@ class Segment:
 
         bpms_common = np.intersect1d(bpms_x[0], bpms_y[0])
         tw_sbs = self.twiss_sbs()
-        tw_phase, tw_phase_back = self.get_phase_diffs(bpms_x=bpms_x, bpms_y=bpms_y)
+        tw_phase = self.get_phase_diffs(bpms_x=bpms_x, bpms_y=bpms_y)
 
         fig, axs = plt.subplots(
             3, 1, figsize=(11, 11), sharex=True, height_ratios=[0.5, 1, 1], dpi=300
@@ -549,7 +549,7 @@ class Segment:
 
         bpms_common = np.intersect1d(bpms_x[0], bpms_y[0])
         tw_sbs = self.backtwiss_sbs()
-        _, tw_phase = self.get_phase_diffs(bpms_x=bpms_x, bpms_y=bpms_y)
+        tw_phase = self.get_phase_diffs(bpms_x=bpms_x, bpms_y=bpms_y)
 
         fig, axs = plt.subplots(
             3, 1, figsize=(11, 11), sharex=True, height_ratios=[0.5, 1, 1], dpi=300
@@ -644,7 +644,7 @@ class Segment:
 
         bpms_common = np.intersect1d(bpms_x[0], bpms_y[0])
         tw_sbs = self.twiss_sbs()
-        tw_phase, tw_phase_back = self.get_phase_diffs(bpms_x=bpms_x, bpms_y=bpms_y)
+        tw_phase = self.get_phase_diffs(bpms_x=bpms_x, bpms_y=bpms_y)
 
         fig, axs = plt.subplots(2, 1, figsize=(14, 10.5), sharex=True, dpi=300)
 
@@ -661,9 +661,9 @@ class Segment:
             )
 
             axs[i].errorbar(
-                tw_phase_back[i].s,
-                getattr(tw_phase_back[i], f"dmu{PLANE}"),
-                yerr=getattr(tw_phase_back[i], f"dmu{PLANE}_err"),
+                tw_phase[i].s,
+                getattr(tw_phase[i], f"dmu{PLANE}_back"),
+                yerr=getattr(tw_phase[i], f"dmu{PLANE}_back_err"),
                 marker="o",
                 ls="-",
                 label="Measurement, Back Prop.",
