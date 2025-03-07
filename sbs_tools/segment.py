@@ -393,14 +393,14 @@ class Segment:
             bpms_y = s_bpms["bpms_y"]
 
         if self.fmt == "bbsrc":
-            erdx = self.mes.data_dx.loc[bpms_x[1, 0]].STDDX
-            erdy = self.mes.data_dy.loc[bpms_y[1, 0]].STDDY
+            mes_dispx_std = self.mes.data_dx.loc[bpms_x[1]].STDDX.values
+            mes_dispy_std = self.mes.data_dy.loc[bpms_y[1]].STDDY.values
         elif self.fmt == "omc3":
-            erdx = self.mes.data_dx.loc[bpms_x[1, 0]].ERRDX
-            erdy = self.mes.data_dy.loc[bpms_y[1, 0]].ERRDY
+            mes_dispx_std = self.mes.data_dx.loc[bpms_x[1]].ERRDX.values
+            mes_dispy_std = self.mes.data_dy.loc[bpms_y[1]].ERRDY.values
 
         normal_prop_dx_err = _propagate_error_dispersion(
-            erdx,
+            mes_dispx_std[0],
             tw_front.rows[bpms_x[0]].betx[0],
             tw_front.rows[bpms_x[0]].betx,
             (tw_front.rows[bpms_x[0]].mux % 1),
@@ -408,11 +408,27 @@ class Segment:
         )
 
         normal_prop_dy_err = _propagate_error_dispersion(
-            erdy,
+            mes_dispy_std[0],
             tw_front.rows[bpms_y[0]].bety[0],
             tw_front.rows[bpms_y[0]].bety,
             (tw_front.rows[bpms_y[0]].muy % 1),
             tw_front.rows[bpms_y[0]].alfy[0],
+        )
+
+        back_prop_dx_err = _propagate_error_dispersion(
+            mes_dispx_std[-1],
+            tw_back.rows[bpms_x[0]].betx[-1],
+            tw_back.rows[bpms_x[0]].betx,
+            (tw_back.rows[bpms_x[0]].mux % 1),
+            tw_back.rows[bpms_x[0]].alfx[-1],
+        )
+
+        back_prop_dy_err = _propagate_error_dispersion(
+            mes_dispx_std[-1],
+            tw_back.rows[bpms_y[0]].bety[-1],
+            tw_back.rows[bpms_y[0]].bety,
+            (tw_back.rows[bpms_y[0]].muy % 1),
+            tw_back.rows[bpms_y[0]].alfy[-1],
         )
 
         resx["name"] = tw_front.rows[bpms_x[0]].name
@@ -421,11 +437,12 @@ class Segment:
         resx["dx_diff"] = (
             self.mes.data_dx.loc[bpms_x[1]].DX.values - tw_front.rows[bpms_x[0]].dx
         )
-        resx["dx_diff_err"] = np.sqrt(erdx**2 + normal_prop_dx_err**2)
+        resx["dx_diff_err"] = np.sqrt(mes_dispx_std**2 + normal_prop_dx_err**2)
         resx["dx_back"] = tw_back.rows[bpms_x[0]].dx
         resx["dx_diff_back"] = (
             self.mes.data_dx.loc[bpms_x[1]].DX.values - tw_back.rows[bpms_x[0]].dx
         )
+        resx["dx_diff_back_err"] = np.sqrt(mes_dispx_std**2 + back_prop_dx_err**2)
 
         resy["name"] = tw_front.rows[bpms_y[0]].name
         resy["s"] = tw_front.rows[bpms_y[0]].s
@@ -433,11 +450,12 @@ class Segment:
         resy["dy_diff"] = (
             self.mes.data_dy.loc[bpms_y[1]].DY.values - tw_front.rows[bpms_y[0]].dy
         )
-        resy["dy_diff_err"] = np.sqrt(erdy**2 + normal_prop_dy_err**2)
+        resy["dy_diff_err"] = np.sqrt(mes_dispy_std**2 + normal_prop_dy_err**2)
         resy["dy_back"] = tw_back.rows[bpms_y[0]].dy
         resy["dy_diff_back"] = (
             self.mes.data_dy.loc[bpms_y[1]].DY.values - tw_back.rows[bpms_y[0]].dy
         )
+        resy["dy_diff_back_err"] = np.sqrt(mes_dispy_std**2 + back_prop_dy_err**2)
 
         return (xt.TwissTable(resx), xt.TwissTable(resy))
 
