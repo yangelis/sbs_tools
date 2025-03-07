@@ -18,6 +18,18 @@ def _propagate_error_phase(errb0, erra0, dphi, bet0, alf0):
     ) / (2 * np.pi)
 
 
+def _propagate_error_phase2(errb0, erra0, dphi, bet0, alf0):
+    # NOTE: Written as in OMC3 SBS
+    sin2phi = np.sin(4 * np.pi * dphi)
+    cos2phi = np.cos(4 * np.pi * dphi)
+
+    res = np.sqrt(
+        (0.5 * (((cos2phi - 1) * alf0) - sin2phi) * errb0 / bet0) ** 2
+        + (0.5 * (cos2phi - 1) * erra0) ** 2
+    ) / (2 * np.pi)
+    return res
+
+
 def _propagate_error_dispersion(std_D0, bet0, bets, dphi, alf0):
     return np.abs(
         std_D0

@@ -2,7 +2,12 @@ import xtrack as xt
 import numpy as np
 import matplotlib.pyplot as plt
 from .readers import OptData
-from .utils import _get_mu_diff, _propagate_error_phase, _propagate_error_dispersion
+from .utils import (
+    _get_mu_diff,
+    _propagate_error_phase,
+    _propagate_error_phase2,
+    _propagate_error_dispersion,
+)
 
 from typing import Sequence
 
@@ -10,12 +15,18 @@ from typing import Sequence
 class Segment:
 
     def __init__(
-        self, line: xt.Line, start_bpm: str, end_bpm: str, mes: OptData
+        self,
+        line: xt.Line,
+        start_bpm: str,
+        end_bpm: str,
+        mes: OptData,
+        fmt: str = "bbsrc",
     ) -> None:
         self.line = line.copy()
         self.start_bpm = start_bpm
         self.end_bpm = end_bpm
         self.mes = mes
+        self.fmt = fmt
 
         init_start, _ = self.get_tw_init(at_ele=self.start_bpm)
         init_end, _ = self.get_tw_init(at_ele=self.end_bpm)
@@ -36,16 +47,19 @@ class Segment:
             self.line.vars[str(kn)] = self.original_vals[str(kn)]
 
     def get_R_terms(self, betx, bety, alfx, alfy, f1001r, f1001i, f1010r, f1010i):
-        ga11 = 1 / np.sqrt(betx)
+        sqrbx = np.sqrt(betx)
+        sqrby = np.sqrt(bety)
+
+        ga11 = 1 / sqrbx
         ga12 = 0
-        ga21 = alfx / np.sqrt(betx)
-        ga22 = np.sqrt(betx)
+        ga21 = alfx / sqrbx
+        ga22 = sqrbx
         Ga = np.reshape(np.array([ga11, ga12, ga21, ga22]), (2, 2))
 
-        gb11 = 1 / np.sqrt(bety)
+        gb11 = 1 / sqrby
         gb12 = 0
-        gb21 = alfy / np.sqrt(bety)
-        gb22 = np.sqrt(bety)
+        gb21 = alfy / sqrby
+        gb22 = sqrby
         Gb = np.reshape(np.array([gb11, gb12, gb21, gb22]), (2, 2))
 
         J = np.reshape(np.array([0, 1, -1, 0]), (2, 2))
@@ -82,16 +96,30 @@ class Segment:
         wx_ini = 0.0
         wy_ini = 0.0
 
-        betx_ini = self.mes.betx_free.BETX.loc[BPM]
-        bety_ini = self.mes.bety_free.BETY.loc[BPM]
-        alfx_ini = self.mes.betx_free.ALFX.loc[BPM]
-        alfy_ini = self.mes.bety_free.ALFY.loc[BPM]
-
         f_ini_bbs = {}
-        f_ini_bbs["f1001r"] = self.mes.coupling.F1001R.loc[BPM]
-        f_ini_bbs["f1001i"] = self.mes.coupling.F1001I.loc[BPM]
-        f_ini_bbs["f1010r"] = self.mes.coupling.F1010R.loc[BPM]
-        f_ini_bbs["f1010i"] = self.mes.coupling.F1010I.loc[BPM]
+
+        if self.fmt == "bbsrc":
+            betx_ini = self.mes.betx_free.BETX.loc[BPM]
+            bety_ini = self.mes.bety_free.BETY.loc[BPM]
+            alfx_ini = self.mes.betx_free.ALFX.loc[BPM]
+            alfy_ini = self.mes.bety_free.ALFY.loc[BPM]
+
+            f_ini_bbs["f1001r"] = self.mes.coupling.F1001R.loc[BPM]
+            f_ini_bbs["f1001i"] = self.mes.coupling.F1001I.loc[BPM]
+            f_ini_bbs["f1010r"] = self.mes.coupling.F1010R.loc[BPM]
+            f_ini_bbs["f1010i"] = self.mes.coupling.F1010I.loc[BPM]
+
+        elif self.fmt == "omc3":
+            betx_ini = self.mes.betx.BETX.loc[BPM]
+            bety_ini = self.mes.bety.BETY.loc[BPM]
+            alfx_ini = self.mes.betx.ALFX.loc[BPM]
+            alfy_ini = self.mes.bety.ALFY.loc[BPM]
+
+            f_ini_bbs["f1001r"] = self.mes.f1001.REAL.loc[BPM]
+            f_ini_bbs["f1001i"] = self.mes.f1001.IMAG.loc[BPM]
+            f_ini_bbs["f1010r"] = self.mes.f1010.REAL.loc[BPM]
+            f_ini_bbs["f1010i"] = self.mes.f1010.IMAG.loc[BPM]
+
         try:
             dx_ini = self.mes.data_dx.DX.loc[BPM]
             dy_ini = self.mes.data_dy.DY.loc[BPM]
@@ -113,6 +141,7 @@ class Segment:
 
         R_mat = np.array([(ini_r11, ini_r12), (ini_r21, ini_r22)])
         init = xt.twiss.TwissInit(
+            element_name=at_ele,
             betx=betx_ini,
             bety=bety_ini,
             alfx=alfx_ini,
@@ -123,7 +152,6 @@ class Segment:
             dpy=dpy_ini,
             mux=phix_ini,
             muy=phiy_ini,
-            element_name=at_ele,
         )
         return init, R_mat
 
@@ -208,10 +236,8 @@ class Segment:
         return res
 
     def get_phase_diffs(
-        self, bpms_x=None, bpms_y=None, fmt: str = "bb"
-    ) -> tuple[
-        tuple[xt.TwissTable, xt.TwissTable], tuple[xt.TwissTable, xt.TwissTable]
-    ]:
+        self, bpms_x=None, bpms_y=None
+    ) -> tuple[tuple[xt.TwissTable, xt.TwissTable]]:
         tw_front = self.twiss_sbs()
         tw_back = self.backtwiss_sbs()
 
@@ -270,7 +296,7 @@ class Segment:
         alfx_end_err = self.mes.betx.loc[bpms_x[1, -1]].ERRALFX
         alfy_end_err = self.mes.bety.loc[bpms_y[1, -1]].ERRALFY
 
-        prop_front_phasex_error = _propagate_error_phase(
+        prop_front_phasex_error = _propagate_error_phase2(
             betx_ini_err,
             alfx_ini_err,
             tw_front.rows[bpms_x[0]].mux,
@@ -278,7 +304,7 @@ class Segment:
             alfx_ini,
         )
 
-        prop_front_phasey_error = _propagate_error_phase(
+        prop_front_phasey_error = _propagate_error_phase2(
             bety_ini_err,
             alfy_ini_err,
             tw_front.rows[bpms_y[0]].muy,
@@ -286,7 +312,7 @@ class Segment:
             alfy_ini,
         )
 
-        prop_back_phasex_error = _propagate_error_phase(
+        prop_back_phasex_error = _propagate_error_phase2(
             betx_end_err,
             alfx_end_err,
             tw_back.rows[bpms_x[0]].mux,
@@ -294,7 +320,7 @@ class Segment:
             alfx_end,
         )
 
-        prop_back_phasey_error = _propagate_error_phase(
+        prop_back_phasey_error = _propagate_error_phase2(
             bety_end_err,
             alfy_end_err,
             tw_back.rows[bpms_y[0]].muy,
@@ -307,87 +333,50 @@ class Segment:
         mux_back = (tw_back.rows[bpms_x[0]].mux - tw_back.rows[bpms_x[0]].mux[0]) % 1
         muy_back = (tw_back.rows[bpms_y[0]].muy - tw_back.rows[bpms_y[0]].muy[0]) % 1
 
-        if fmt == "bb":
-            mux_diff_err_front = np.sqrt(
-                prop_front_phasex_error**2
-                + self.mes.total_phase_x.loc[bpms_x[1]].STDPHX.values ** 2
-            )
-
-            muy_diff_err_front = np.sqrt(
-                prop_front_phasey_error**2
-                + self.mes.total_phase_y.loc[bpms_y[1]].STDPHY.values ** 2
-            )
-
-            mux_diff_err_back = np.sqrt(
-                prop_back_phasex_error**2
-                + self.mes.total_phase_x.loc[bpms_x[1]].STDPHX.values ** 2
-            )
-
-            muy_diff_err_back = np.sqrt(
-                prop_back_phasey_error**2
-                + self.mes.total_phase_y.loc[bpms_y[1]].STDPHY.values ** 2
-            )
-        elif fmt == "omc":
-            mux_diff_err_front = np.sqrt(
-                prop_front_phasex_error**2
-                + self.mes.total_phase_x.loc[bpms_x[1]].ERRPHASEX.values ** 2
-            )
-
-            muy_diff_err_front = np.sqrt(
-                prop_front_phasey_error**2
-                + self.mes.total_phase_y.loc[bpms_y[1]].ERRPHASEY.values ** 2
-            )
-
-            mux_diff_err_back = np.sqrt(
-                prop_back_phasex_error**2
-                + self.mes.total_phase_x.loc[bpms_x[1]].ERRPHASEX.values ** 2
-            )
-
-            muy_diff_err_back = np.sqrt(
-                prop_back_phasey_error**2
-                + self.mes.total_phase_y.loc[bpms_y[1]].ERRPHASEY.values ** 2
-            )
+        if self.fmt == "bbsrc":
+            erphx = self.mes.total_phase_x.loc[bpms_x[1]].STDPHX.values
+            erphy = self.mes.total_phase_y.loc[bpms_y[1]].STDPHY.values
+        elif self.fmt == "omc3":
+            erphx = self.mes.total_phase_x.loc[bpms_x[1]].ERRPHASEX.values
+            erphy = self.mes.total_phase_y.loc[bpms_y[1]].ERRPHASEY.values
         else:
-            print(f"Wrong {fmt=}. Choose bb or omc")
+            print(f"Wrong {self.fmt=}. Choose bbsrc or omc3")
 
-        resx_front = {}
-        resy_front = {}
-        resx_back = {}
-        resy_back = {}
-
-        resx_front["name"] = bpms_x[0]
-        resx_front["s"] = tw_front.rows[bpms_x[0]].s
-        resx_front["mux"] = tw_front.rows[bpms_x[0]].mux
-        resx_front["mux2"] = mux_front
-        resx_front["dmux"] = mux_diff_front
-        resx_front["dmux_err"] = mux_diff_err_front
-
-        resy_front["name"] = bpms_y[0]
-        resy_front["s"] = tw_front.rows[bpms_y[0]].s
-        resy_front["muy"] = tw_front.rows[bpms_y[0]].muy
-        resy_front["muy2"] = muy_front
-        resy_front["dmuy"] = muy_diff_front
-        resy_front["dmuy_err"] = muy_diff_err_front
+        mux_diff_err_front = np.sqrt(prop_front_phasex_error**2 + erphx**2)
+        muy_diff_err_front = np.sqrt(prop_front_phasey_error**2 + erphy**2)
 
         # TODO: check if errors are calculated correctly
-        resx_back["name"] = bpms_x[0]
-        resx_back["s"] = tw_back.rows[bpms_x[0]].s
-        resx_back["mux"] = tw_back.rows[bpms_x[0]].mux
-        resx_back["mux2"] = mux_back
-        resx_back["dmux"] = mux_diff_back
-        resx_back["dmux_err"] = mux_diff_err_back
+        mux_diff_err_back = np.sqrt(prop_back_phasex_error**2 + erphx**2)
+        muy_diff_err_back = np.sqrt(prop_back_phasey_error**2 + erphy**2)
 
-        resy_back["name"] = bpms_y[0]
-        resy_back["s"] = tw_back.rows[bpms_y[0]].s
-        resy_back["muy"] = tw_back.rows[bpms_y[0]].muy
-        resy_back["muy2"] = muy_back
-        resy_back["dmuy"] = muy_diff_back
-        resy_back["dmuy_err"] = muy_diff_err_back
+        resx = {}
+        resy = {}
 
-        front_tw = (xt.TwissTable(resx_front), xt.TwissTable(resy_front))
-        back_tw = (xt.TwissTable(resx_back), xt.TwissTable(resy_back))
+        resx["name"] = bpms_x[0]
+        resx["s"] = tw_front.rows[bpms_x[0]].s
+        resx["mux"] = tw_front.rows[bpms_x[0]].mux
+        resx["mux2"] = mux_front
+        resx["dmux"] = mux_diff_front
+        resx["dmux_err"] = mux_diff_err_front
 
-        return front_tw, back_tw
+        resx["mux_back"] = tw_back.rows[bpms_x[0]].mux
+        resx["mux2_back"] = mux_back
+        resx["dmux_back"] = mux_diff_back
+        resx["dmux_back_err"] = mux_diff_err_back
+
+        resy["name"] = bpms_y[0]
+        resy["s"] = tw_front.rows[bpms_y[0]].s
+        resy["muy"] = tw_front.rows[bpms_y[0]].muy
+        resy["muy2"] = muy_front
+        resy["dmuy"] = muy_diff_front
+        resy["dmuy_err"] = muy_diff_err_front
+
+        resy["muy_back"] = tw_back.rows[bpms_y[0]].muy
+        resy["muy2_back"] = muy_back
+        resy["dmuy_back"] = muy_diff_back
+        resy["dmuy_back_err"] = muy_diff_err_back
+
+        return (xt.TwissTable(resx), xt.TwissTable(resy))
 
     def get_disp_diffs(
         self, bpms_x=None, bpms_y=None
@@ -395,44 +384,59 @@ class Segment:
         resx = {}
         resy = {}
 
-        tw = self.twiss_sbs()
+        tw_front = self.twiss_sbs()
+        tw_back = self.backtwiss_sbs()
 
         if bpms_x is None and bpms_y is None:
             s_bpms = self.get_s_and_bpms(attr="data_d")
             bpms_x = s_bpms["bpms_x"]
             bpms_y = s_bpms["bpms_y"]
 
+        if self.fmt == "bbsrc":
+            erdx = self.mes.data_dx.loc[bpms_x[1, 0]].STDDX
+            erdy = self.mes.data_dy.loc[bpms_y[1, 0]].STDDY
+        elif self.fmt == "omc3":
+            erdx = self.mes.data_dx.loc[bpms_x[1, 0]].ERRDX
+            erdy = self.mes.data_dy.loc[bpms_y[1, 0]].ERRDY
+
         normal_prop_dx_err = _propagate_error_dispersion(
-            self.mes.data_dx.loc[bpms_x[1][0]].STDDX,
-            tw.rows[bpms_x[0]].betx[0],
-            tw.rows[bpms_x[0]].betx,
-            (tw.rows[bpms_x[0]].mux % 1),
-            tw.rows[bpms_x[0]].alfx[0],
+            erdx,
+            tw_front.rows[bpms_x[0]].betx[0],
+            tw_front.rows[bpms_x[0]].betx,
+            (tw_front.rows[bpms_x[0]].mux % 1),
+            tw_front.rows[bpms_x[0]].alfx[0],
         )
 
         normal_prop_dy_err = _propagate_error_dispersion(
-            self.mes.data_dy.loc[bpms_y[1][0]].STDDY,
-            tw.rows[bpms_y[0]].bety[0],
-            tw.rows[bpms_y[0]].bety,
-            (tw.rows[bpms_y[0]].muy % 1),
-            tw.rows[bpms_y[0]].alfy[0],
+            erdy,
+            tw_front.rows[bpms_y[0]].bety[0],
+            tw_front.rows[bpms_y[0]].bety,
+            (tw_front.rows[bpms_y[0]].muy % 1),
+            tw_front.rows[bpms_y[0]].alfy[0],
         )
 
-        resx["name"] = tw.rows[bpms_x[0]].name
-        resx["s"] = tw.rows[bpms_x[0]].s
+        resx["name"] = tw_front.rows[bpms_x[0]].name
+        resx["s"] = tw_front.rows[bpms_x[0]].s
+        resx["dx"] = tw_front.rows[bpms_x[0]].dx
         resx["dx_diff"] = (
-            self.mes.data_dx.loc[bpms_x[1]].DX.values - tw.rows[bpms_x[0]].dx
+            self.mes.data_dx.loc[bpms_x[1]].DX.values - tw_front.rows[bpms_x[0]].dx
         )
-        resx["dx_diff_err"] = np.sqrt(
-            self.mes.data_dx.loc[bpms_x[1]].STDDX.values ** 2 + normal_prop_dx_err**2
+        resx["dx_diff_err"] = np.sqrt(erdx**2 + normal_prop_dx_err**2)
+        resx["dx_back"] = tw_back.rows[bpms_x[0]].dx
+        resx["dx_diff_back"] = (
+            self.mes.data_dx.loc[bpms_x[1]].DX.values - tw_back.rows[bpms_x[0]].dx
         )
-        resy["name"] = tw.rows[bpms_y[0]].name
-        resy["s"] = tw.rows[bpms_y[0]].s
+
+        resy["name"] = tw_front.rows[bpms_y[0]].name
+        resy["s"] = tw_front.rows[bpms_y[0]].s
+        resy["dy"] = tw_front.rows[bpms_y[0]].dy
         resy["dy_diff"] = (
-            self.mes.data_dy.loc[bpms_y[1]].DY.values - tw.rows[bpms_y[0]].dy
+            self.mes.data_dy.loc[bpms_y[1]].DY.values - tw_front.rows[bpms_y[0]].dy
         )
-        resy["dy_diff_err"] = np.sqrt(
-            self.mes.data_dy.loc[bpms_y[1]].STDDY.values ** 2 + normal_prop_dy_err**2
+        resy["dy_diff_err"] = np.sqrt(erdy**2 + normal_prop_dy_err**2)
+        resy["dy_back"] = tw_back.rows[bpms_y[0]].dy
+        resy["dy_diff_back"] = (
+            self.mes.data_dy.loc[bpms_y[1]].DY.values - tw_back.rows[bpms_y[0]].dy
         )
 
         return (xt.TwissTable(resx), xt.TwissTable(resy))
@@ -448,9 +452,7 @@ class Segment:
 
         bpms_common = np.intersect1d(bpms_x[0], bpms_y[0])
         tw_sbs = self.twiss_sbs()
-        tw_phase, tw_phase_back = self.get_phase_diffs(
-            bpms_x=bpms_x, bpms_y=bpms_y, fmt="bb"
-        )
+        tw_phase, tw_phase_back = self.get_phase_diffs(bpms_x=bpms_x, bpms_y=bpms_y)
 
         fig, axs = plt.subplots(
             3, 1, figsize=(11, 11), sharex=True, height_ratios=[0.5, 1, 1], dpi=300
@@ -547,7 +549,7 @@ class Segment:
 
         bpms_common = np.intersect1d(bpms_x[0], bpms_y[0])
         tw_sbs = self.backtwiss_sbs()
-        _, tw_phase = self.get_phase_diffs(bpms_x=bpms_x, bpms_y=bpms_y, fmt="bb")
+        _, tw_phase = self.get_phase_diffs(bpms_x=bpms_x, bpms_y=bpms_y)
 
         fig, axs = plt.subplots(
             3, 1, figsize=(11, 11), sharex=True, height_ratios=[0.5, 1, 1], dpi=300
@@ -642,9 +644,7 @@ class Segment:
 
         bpms_common = np.intersect1d(bpms_x[0], bpms_y[0])
         tw_sbs = self.twiss_sbs()
-        tw_phase, tw_phase_back = self.get_phase_diffs(
-            bpms_x=bpms_x, bpms_y=bpms_y, fmt="bb"
-        )
+        tw_phase, tw_phase_back = self.get_phase_diffs(bpms_x=bpms_x, bpms_y=bpms_y)
 
         fig, axs = plt.subplots(2, 1, figsize=(14, 10.5), sharex=True, dpi=300)
 
