@@ -566,11 +566,17 @@ class Segment:
         resx["name"] = tw_front.rows[bpms_x[0]].name
         resx["s"] = tw_front.rows[bpms_x[0]].s
         resx["dx"] = tw_front.rows[bpms_x[0]].dx
+        resx["ndx"] = tw_front.rows[bpms_x[0]].dx / np.sqrt(
+            tw_front.rows[bpms_x[0]].betx
+        )
         resx["dx_diff"] = (
             self.mes.data_dx.loc[bpms_x[1]].DX.values - tw_front.rows[bpms_x[0]].dx
         )
         resx["dx_diff_err"] = np.sqrt(mes_dispx_std**2 + normal_prop_dx_err**2)
         resx["dx_back"] = tw_back.rows[bpms_x[0]].dx
+        resx["ndx_back"] = tw_back.rows[bpms_x[0]].dx / np.sqrt(
+            tw_back.rows[bpms_x[0]].betx
+        )
         resx["dx_diff_back"] = (
             self.mes.data_dx.loc[bpms_x[1]].DX.values - tw_back.rows[bpms_x[0]].dx
         )
@@ -579,11 +585,17 @@ class Segment:
         resy["name"] = tw_front.rows[bpms_y[0]].name
         resy["s"] = tw_front.rows[bpms_y[0]].s
         resy["dy"] = tw_front.rows[bpms_y[0]].dy
+        resy["ndy"] = tw_front.rows[bpms_y[0]].dy / np.sqrt(
+            tw_front.rows[bpms_y[0]].bety
+        )
         resy["dy_diff"] = (
             self.mes.data_dy.loc[bpms_y[1]].DY.values - tw_front.rows[bpms_y[0]].dy
         )
         resy["dy_diff_err"] = np.sqrt(mes_dispy_std**2 + normal_prop_dy_err**2)
         resy["dy_back"] = tw_back.rows[bpms_y[0]].dy
+        resy["ndy_back"] = tw_back.rows[bpms_y[0]].dy / np.sqrt(
+            tw_back.rows[bpms_y[0]].bety
+        )
         resy["dy_diff_back"] = (
             self.mes.data_dy.loc[bpms_y[1]].DY.values - tw_back.rows[bpms_y[0]].dy
         )
