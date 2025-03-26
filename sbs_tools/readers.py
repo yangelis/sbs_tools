@@ -4,6 +4,7 @@ import tfs
 class OptData:
     def __init__(self, foldername, fmt="omc3") -> None:
         self.name = foldername.split("/")[-1]
+        self.has_dispersion = False
         if fmt == "omc3":
             self.x = tfs.read_tfs(f"{foldername}/orbit_x.tfs", index="NAME")
             self.y = tfs.read_tfs(f"{foldername}/orbit_y.tfs", index="NAME")
@@ -31,8 +32,10 @@ class OptData:
                 self.data_dy = tfs.read_tfs(
                     f"{foldername}/dispersion_y.tfs", index="NAME"
                 )
+                self.has_dispersion = True
             except:
-                print("No dispersion files found")
+                pass
+                # print("No dispersion files found")
 
             # self.betx_amp = tfs.read_tfs(
             #     f"{foldername}/beta_amplitude_x.tfs", index="NAME"
@@ -80,10 +83,16 @@ class OptData:
                 self.data_dx = tfs.read_tfs(f"{foldername}/getDx.out", index="NAME")
                 self.data_dy = tfs.read_tfs(f"{foldername}/getDy.out", index="NAME")
                 self.data_ndx = tfs.read_tfs(f"{foldername}/getNDx.out", index="NAME")
+                self.has_dispersion = True
             except:
-                print("No dispersion files found")
+                pass
+                # print("No dispersion files found")
+
             try:
                 self.data_ndy = tfs.read_tfs(f"{foldername}/getNDy.out", index="NAME")
+                self.has_normdy = True
             except:
-                print("No NDy found")
+                self.has_normdy = False
+                # print("No NDy found")
+
             self.data_f1001 = tfs.read_tfs(f"{foldername}/getcouple.out", index="NAME")

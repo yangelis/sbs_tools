@@ -37,10 +37,16 @@ class Segment:
         self.original_vals = {}
 
     def activate_knobs(self, knobs: Sequence[str], values: Sequence[float]) -> None:
-
+        """'
+        NOTE: I don't like this one'
+        """
         for kn, kv in zip(knobs, values):
             self.original_vals[str(kn)] = self.line.varval[str(kn)]
             self.line.vars[str(kn)] += kv
+
+    def set_knobs(self, knobs: Sequence[str], values: Sequence[float]) -> None:
+        for kn, kv in zip(knobs, values):
+            self.line.vars[str(kn)] = kv
 
     def restore_knobs(self, knobs: Sequence[str]) -> None:
         for kn in knobs:
@@ -87,14 +93,15 @@ class Segment:
         and the coupling matrix, derived from the measurement
         """
         BPM = at_ele.upper()
-        phix_ini = 0.0
-        phiy_ini = 0.0
         dpx_ini = 0
         dpy_ini = 0
         dx_ini = 0
         dy_ini = 0
-        wx_ini = 0.0
-        wy_ini = 0.0
+
+        phix_ini = 0.0
+        phiy_ini = 0.0
+        wx_ini = 0
+        wy_ini = 0
 
         f_ini_bbs = {}
 
@@ -120,13 +127,16 @@ class Segment:
             f_ini_bbs["f1010r"] = self.mes.f1010.REAL.loc[BPM]
             f_ini_bbs["f1010i"] = self.mes.f1010.IMAG.loc[BPM]
 
-        try:
+        if self.mes.has_dispersion:
             dx_ini = self.mes.data_dx.DX.loc[BPM]
             dy_ini = self.mes.data_dy.DY.loc[BPM]
             dpx_ini = self.mes.data_dx.DPX.loc[BPM]
             dpy_ini = self.mes.data_dy.DPY.loc[BPM]
-        except:
-            print("No dispersion measurements available")
+
+        # ax_chrom = wx_ini * np.cos(phix_ini)
+        # bx_chrom = wx_ini * np.sin(phix_ini)
+        # ay_chrom = wy_ini * np.cos(phiy_ini)
+        # by_chrom = wy_ini * np.sin(phiy_ini)
 
         ini_r11, ini_r12, ini_r21, ini_r22 = self.get_R_terms(
             betx=betx_ini,
@@ -150,8 +160,8 @@ class Segment:
             dy=dy_ini,
             dpx=dpx_ini,
             dpy=dpy_ini,
-            mux=phix_ini,
-            muy=phiy_ini,
+            mux=0.0,
+            muy=0.0,
         )
         return init, R_mat
 
@@ -163,29 +173,151 @@ class Segment:
         else:
             print("Available modes are 'front' and 'back'")
 
-    def twiss_sbs(self) -> xt.TwissTable:
+    def twiss_sbs(self, tw_init=None) -> xt.TwissTable:
         """
         Get twiss for the segment
         """
-        if self.init_start is None:
-            self.init_start, Rmat = self.get_tw_init()
-        sbs_tw = self.line.twiss(
-            start=self.start_bpm, end=self.end_bpm, init=self.init_start
-        )
+        if tw_init is None:
+            tw_init = self.init_start
+        sbs_tw = self.line.twiss(start=self.start_bpm, end=self.end_bpm, init=tw_init)
 
         return sbs_tw
 
-    def backtwiss_sbs(self) -> xt.TwissTable:
+    def backtwiss_sbs(self, tw_init=None) -> xt.TwissTable:
         """
         Get twiss for the segment
         """
-        if self.init_end is None:
-            self.init_end, Rmat = self.get_tw_init(at_ele=self.end_bpm)
-        sbs_tw = self.line.twiss(
-            start=self.start_bpm, end=self.end_bpm, init=self.init_end
-        )
+        if tw_init is None:
+            tw_init = self.init_end
+        sbs_tw = self.line.twiss(start=self.start_bpm, end=self.end_bpm, init=tw_init)
 
         return sbs_tw
+
+    def twiss_madng(self, seq_name="lhcb1") -> tuple[xt.TwissTable, xt.TwissTable]:
+        """
+        Calculates fwd and bwk twiss for the segment using MAD-NG
+        """
+        tw_base = self.twiss_sbs()
+
+        self.line.vars["name"] = 0
+        self.line.vars["comments"] = 1
+        mng = self.line.to_madng(sequence_name=seq_name)
+
+        init_start, r_start = self.get_tw_init(at_ele=self.start_bpm)
+        init_end, r_end = self.get_tw_init(at_ele=self.end_bpm)
+
+        b0 = mng.beta0(
+            beta11=init_start._temp_optics_data["betx"],
+            beta22=init_start._temp_optics_data["bety"],
+            alfa11=init_start._temp_optics_data["alfx"],
+            alfa22=init_start._temp_optics_data["alfy"],
+            betx=init_start._temp_optics_data["betx"],
+            bety=init_start._temp_optics_data["bety"],
+            alfx=init_start._temp_optics_data["alfx"],
+            alfy=init_start._temp_optics_data["alfy"],
+            dx=init_start._temp_optics_data["dx"],
+            dy=init_start._temp_optics_data["dy"],
+            dpx=init_start._temp_optics_data["dpx"],
+            dpy=init_start._temp_optics_data["dpy"],
+            cplg=True,
+            r11=r_start[0, 0],
+            r12=r_start[0, 1],
+            r21=r_start[1, 0],
+            r22=r_start[1, 1],
+        )
+
+        b0_back = mng.beta0(
+            beta11=init_end._temp_optics_data["betx"],
+            beta22=init_end._temp_optics_data["bety"],
+            alfa11=init_end._temp_optics_data["alfx"],
+            alfa22=init_end._temp_optics_data["alfy"],
+            betx=init_end._temp_optics_data["betx"],
+            bety=init_end._temp_optics_data["bety"],
+            alfx=init_end._temp_optics_data["alfx"],
+            alfy=init_end._temp_optics_data["alfy"],
+            dx=init_end._temp_optics_data["dx"],
+            dy=init_end._temp_optics_data["dy"],
+            dpx=init_end._temp_optics_data["dpx"],
+            dpy=init_end._temp_optics_data["dpy"],
+            cplg=True,
+            r11=r_end[0, 0],
+            r12=r_end[0, 1],
+            r21=r_end[1, 0],
+            r22=r_end[1, 1],
+        )
+
+        mng["tbl", "flw"] = mng.twiss(
+            sequence=getattr(mng.MADX, seq_name),
+            s0=tw_base.s[0],
+            X0=b0,
+            method=4,
+            chrom=True,
+            coupling=True,
+            # nslice=3,
+            # implicit=True,
+            # save="atbody",
+            range=f"'{self.start_bpm.upper()}/{self.end_bpm.upper()}'",
+        )
+
+        mng["tbl_back", "flw"] = mng.twiss(
+            sequence=getattr(mng.MADX, seq_name),
+            s0=tw_base.s[-1],
+            X0=b0_back,
+            dir=-1,
+            method=4,
+            chrom=True,
+            coupling=True,
+            # nslice=3,
+            # implicit=True,
+            # save="atbody",
+            range=f"'{self.end_bpm.upper()}/{self.start_bpm.upper()}'",
+        )
+
+        tw_ng1 = mng.tbl.to_df()
+        tw_ng1_back = mng.tbl_back.to_df()
+
+        tw_ng1_back = tw_ng1_back.iloc[::-1]
+
+        twcols = [
+            "s",
+            "betx",
+            "bety",
+            "alfx",
+            "alfy",
+            "x",
+            "y",
+            "px",
+            "py",
+            "dx",
+            "dy",
+            "dpx",
+            "dpy",
+        ]
+
+        dct = {}
+        dct["name"] = np.atleast_1d(np.squeeze([nn.lower() for nn in tw_ng1.name]))
+
+        for nn in twcols:
+            dct[nn] = np.atleast_1d(np.squeeze(tw_ng1[nn]))
+
+        dct["mux"] = np.atleast_1d(np.squeeze(tw_ng1.mu1))
+        dct["muy"] = np.atleast_1d(np.squeeze(tw_ng1.mu2))
+
+        dct_back = {}
+        dct_back["name"] = np.atleast_1d(
+            np.squeeze([nn.lower() for nn in tw_ng1_back.name])
+        )
+
+        for nn in twcols:
+            dct_back[nn] = np.atleast_1d(np.squeeze(tw_ng1_back[nn]))
+
+        dct_back["mux"] = np.atleast_1d(np.squeeze(tw_ng1_back.mu1))
+        dct_back["muy"] = np.atleast_1d(np.squeeze(tw_ng1_back.mu2))
+
+        tw_ng = xt.TwissTable(dct)
+        tw_ng_back = xt.TwissTable(dct_back)
+
+        return tw_ng, tw_ng_back
 
     def get_common_bpms(self, attr: str = "total_phase_"):
         tw_sbs = self.twiss_sbs()
@@ -237,7 +369,7 @@ class Segment:
 
     def get_phase_diffs(
         self, bpms_x=None, bpms_y=None
-    ) -> tuple[tuple[xt.TwissTable, xt.TwissTable]]:
+    ) -> tuple[xt.TwissTable, xt.TwissTable]:
         tw_front = self.twiss_sbs()
         tw_back = self.backtwiss_sbs()
 
@@ -617,8 +749,8 @@ class Segment:
         for i, PLANE in enumerate(["x", "y"]):
             axs[i + 1].errorbar(
                 tw_phase[i].s,
-                getattr(tw_phase[i], f"dmu{PLANE}"),
-                yerr=getattr(tw_phase[i], f"dmu{PLANE}_err"),
+                getattr(tw_phase[i], f"dmu{PLANE}_back"),
+                yerr=getattr(tw_phase[i], f"dmu{PLANE}_back_err"),
                 marker="o",
                 ls="-",
                 label="Measurement",
