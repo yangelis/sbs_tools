@@ -368,10 +368,10 @@ class Segment:
         return res
 
     def get_phase_diffs(
-        self, bpms_x=None, bpms_y=None
+        self, bpms_x=None, bpms_y=None, tw_init_front=None, tw_init_back=None
     ) -> tuple[xt.TwissTable, xt.TwissTable]:
-        tw_front = self.twiss_sbs()
-        tw_back = self.backtwiss_sbs()
+        tw_front = self.twiss_sbs(tw_init_front)
+        tw_back = self.backtwiss_sbs(tw_init_back)
 
         if bpms_x is None and bpms_y is None:
             s_bpms = self.get_s_and_bpms(attr="total_phase_")
@@ -511,13 +511,13 @@ class Segment:
         return (xt.TwissTable(resx), xt.TwissTable(resy))
 
     def get_disp_diffs(
-        self, bpms_x=None, bpms_y=None
+        self, bpms_x=None, bpms_y=None, tw_init_front=None, tw_init_back=None
     ) -> tuple[xt.TwissTable, xt.TwissTable]:
         resx = {}
         resy = {}
 
-        tw_front = self.twiss_sbs()
-        tw_back = self.backtwiss_sbs()
+        tw_front = self.twiss_sbs(tw_init_front)
+        tw_back = self.backtwiss_sbs(tw_init_back)
 
         if bpms_x is None and bpms_y is None:
             s_bpms = self.get_s_and_bpms(attr="data_d")
