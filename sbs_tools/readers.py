@@ -33,9 +33,8 @@ class OptData:
                     f"{foldername}/dispersion_y.tfs", index="NAME"
                 )
                 self.has_dispersion = True
-            except:
-                pass
-                # print("No dispersion files found")
+            except FileNotFoundError:
+                print("No dispersion files found")
 
             # self.betx_amp = tfs.read_tfs(
             #     f"{foldername}/beta_amplitude_x.tfs", index="NAME"
@@ -84,14 +83,13 @@ class OptData:
                 self.data_dy = tfs.read_tfs(f"{foldername}/getDy.out", index="NAME")
                 self.data_ndx = tfs.read_tfs(f"{foldername}/getNDx.out", index="NAME")
                 self.has_dispersion = True
-            except:
-                pass
-                # print("No dispersion files found")
+            except FileNotFoundError:
+                print("No dispersion files found")
 
             try:
                 self.data_ndy = tfs.read_tfs(f"{foldername}/getNDy.out", index="NAME")
                 self.has_normdy = True
-            except:
+            except FileNotFoundError:
                 self.has_normdy = False
                 # print("No NDy found")
 

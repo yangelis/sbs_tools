@@ -4,6 +4,7 @@ from typing import Sequence
 
 
 from .segment import Segment
+from .utils import coupling_rdts
 
 
 def _create_res_array(n1: int, n2: int):
@@ -73,13 +74,18 @@ def create_response(
         _create_res_array(bpms.shape[1], nknobs)
     )
 
+    df1001 = np.zeros(shape=(bpms.shape[1], nknobs), dtype=np.complex128)
+    df1010 = np.zeros(shape=(bpms.shape[1], nknobs), dtype=np.complex128)
+
     tw_sbs = segment.twiss(mode=mode)
+    tw_mdl_cpl = coupling_rdts(segment)
 
     for i, mname in enumerate(magnet_names):
         original_val = getattr(segment.line.element_dict[mname], attr)
         setattr(segment.line.element_dict[mname], attr, original_val + deltak)
 
         tw_dk = segment.twiss(mode=mode)
+        tw_cpl = coupling_rdts(segment)
 
         setattr(segment.line.element_dict[mname], attr, original_val)
 
@@ -99,6 +105,8 @@ def create_response(
             dmuxs,
             dmuys,
         )
+        df1001[:, i] = tw_cpl.f1001 - tw_mdl_cpl.f1001
+        df1010[:, i] = tw_cpl.f1010 - tw_mdl_cpl.f1010
 
     return {
         "BETX": betax,
@@ -111,6 +119,10 @@ def create_response(
         "NDY": ndys,
         "DMUX": dmuxs,
         "DMUY": dmuys,
+        "F1001R": np.real(df1001),
+        "F1010R": np.real(df1010),
+        "F1001I": np.imag(df1001),
+        "F1010I": np.imag(df1010),
     }
 
 

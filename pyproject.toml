@@ -1,9 +1,14 @@
 [build-system]
-build-backend = 'setuptools.build_meta'
-requires = [
-    'setuptools',
-    'numpy', 
-    'matplotlib',
-    'cpymad',
-    'xsuite',
-    ]
+build-backend = "setuptools.build_meta"
+requires = ["setuptools"]
+
+[project]
+name = "sbs_tools"
+version = "0.0.1"
+license = { text = "MIT" }
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "cpymad",
+    "xsuite",
+]

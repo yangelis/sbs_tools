@@ -7,6 +7,7 @@ from .utils import (
     _propagate_error_phase,
     _propagate_error_phase2,
     _propagate_error_dispersion,
+    _phase_difference,
 )
 
 from typing import Sequence
@@ -28,10 +29,12 @@ class Segment:
         self.mes = mes
         self.fmt = fmt
 
-        init_start, _ = self.get_tw_init(at_ele=self.start_bpm)
-        init_end, _ = self.get_tw_init(at_ele=self.end_bpm)
+        init_start, rmat_start = self.get_tw_init(at_ele=self.start_bpm)
+        init_end, rmat_end = self.get_tw_init(at_ele=self.end_bpm)
         self.init_start = init_start
+        self.rmat_start = rmat_start
         self.init_end = init_end
+        self.rmat_end = rmat_end
 
         # Used to save and restore knobs
         self.original_vals = {}
@@ -51,6 +54,11 @@ class Segment:
     def restore_knobs(self, knobs: Sequence[str]) -> None:
         for kn in knobs:
             self.line.vars[str(kn)] = self.original_vals[str(kn)]
+
+    def make_knobs_manual(self, knob_names, knob_base):
+        for kn, kb in zip(knob_names, knob_base):
+            self.line.vars[kn] = 0
+            self.line.vars[kb] += self.line.vars[kn]
 
     def get_R_terms(self, betx, bety, alfx, alfy, f1001r, f1001i, f1010r, f1010i):
         sqrbx = np.sqrt(betx)
@@ -106,32 +114,43 @@ class Segment:
         f_ini_bbs = {}
 
         if self.fmt == "bbsrc":
-            betx_ini = self.mes.betx_free.BETX.loc[BPM]
-            bety_ini = self.mes.bety_free.BETY.loc[BPM]
-            alfx_ini = self.mes.betx_free.ALFX.loc[BPM]
-            alfy_ini = self.mes.bety_free.ALFY.loc[BPM]
+            mes_betx = self.mes.betx_free.loc[BPM]
+            mes_bety = self.mes.bety_free.loc[BPM]
+            mes_cpl = self.mes.coupling.loc[BPM]
 
-            f_ini_bbs["f1001r"] = self.mes.coupling.F1001R.loc[BPM]
-            f_ini_bbs["f1001i"] = self.mes.coupling.F1001I.loc[BPM]
-            f_ini_bbs["f1010r"] = self.mes.coupling.F1010R.loc[BPM]
-            f_ini_bbs["f1010i"] = self.mes.coupling.F1010I.loc[BPM]
+            betx_ini = mes_betx.BETX
+            bety_ini = mes_bety.BETY
+            alfx_ini = mes_betx.ALFX
+            alfy_ini = mes_bety.ALFY
+
+            f_ini_bbs["f1001r"] = mes_cpl.F1001R
+            f_ini_bbs["f1001i"] = mes_cpl.F1001I
+            f_ini_bbs["f1010r"] = mes_cpl.F1010R
+            f_ini_bbs["f1010i"] = mes_cpl.F1010I
 
         elif self.fmt == "omc3":
-            betx_ini = self.mes.betx.BETX.loc[BPM]
-            bety_ini = self.mes.bety.BETY.loc[BPM]
-            alfx_ini = self.mes.betx.ALFX.loc[BPM]
-            alfy_ini = self.mes.bety.ALFY.loc[BPM]
+            mes_betx = self.mes.betx.loc[BPM]
+            mes_bety = self.mes.bety.loc[BPM]
+            mes_f1001 = self.mes.f1001.loc[BPM]
+            mes_f1010 = self.mes.f1010.loc[BPM]
 
-            f_ini_bbs["f1001r"] = self.mes.f1001.REAL.loc[BPM]
-            f_ini_bbs["f1001i"] = self.mes.f1001.IMAG.loc[BPM]
-            f_ini_bbs["f1010r"] = self.mes.f1010.REAL.loc[BPM]
-            f_ini_bbs["f1010i"] = self.mes.f1010.IMAG.loc[BPM]
+            betx_ini = mes_betx.BETX
+            bety_ini = mes_bety.BETY
+            alfx_ini = mes_betx.ALFX
+            alfy_ini = mes_bety.ALFY
+
+            f_ini_bbs["f1001r"] = mes_f1001.REAL
+            f_ini_bbs["f1001i"] = mes_f1001.IMAG
+            f_ini_bbs["f1010r"] = mes_f1010.REAL
+            f_ini_bbs["f1010i"] = mes_f1010.IMAG
 
         if self.mes.has_dispersion:
-            dx_ini = self.mes.data_dx.DX.loc[BPM]
-            dy_ini = self.mes.data_dy.DY.loc[BPM]
-            dpx_ini = self.mes.data_dx.DPX.loc[BPM]
-            dpy_ini = self.mes.data_dy.DPY.loc[BPM]
+            mes_dx = self.mes.data_dx.loc[BPM]
+            mes_dy = self.mes.data_dy.loc[BPM]
+            dx_ini = mes_dx.DX
+            dy_ini = mes_dy.DY
+            dpx_ini = mes_dx.DPX
+            dpy_ini = mes_dy.DPY
 
         # ax_chrom = wx_ini * np.cos(phix_ini)
         # bx_chrom = wx_ini * np.sin(phix_ini)
@@ -173,23 +192,24 @@ class Segment:
         else:
             print("Available modes are 'front' and 'back'")
 
-    def twiss_sbs(self, tw_init=None) -> xt.TwissTable:
+    def twiss_sbs(self, tw_init=None, **kwargs) -> xt.TwissTable:
         """
         Get twiss for the segment
         """
         if tw_init is None:
             tw_init = self.init_start
-        sbs_tw = self.line.twiss(start=self.start_bpm, end=self.end_bpm, init=tw_init)
+        sbs_tw = self.line.twiss(start=self.start_bpm, end=self.end_bpm, init=tw_init,  **kwargs)
 
         return sbs_tw
 
-    def backtwiss_sbs(self, tw_init=None) -> xt.TwissTable:
+    def backtwiss_sbs(self, tw_init=None, **kwargs) -> xt.TwissTable:
         """
         Get twiss for the segment
         """
         if tw_init is None:
             tw_init = self.init_end
-        sbs_tw = self.line.twiss(start=self.start_bpm, end=self.end_bpm, init=tw_init)
+        # NOTE: make sure tw_init is correct for backtwiss
+        sbs_tw = self.line.twiss(start=self.start_bpm, end=self.end_bpm, init=tw_init, **kwargs)
 
         return sbs_tw
 
@@ -211,10 +231,6 @@ class Segment:
             beta22=init_start._temp_optics_data["bety"],
             alfa11=init_start._temp_optics_data["alfx"],
             alfa22=init_start._temp_optics_data["alfy"],
-            betx=init_start._temp_optics_data["betx"],
-            bety=init_start._temp_optics_data["bety"],
-            alfx=init_start._temp_optics_data["alfx"],
-            alfy=init_start._temp_optics_data["alfy"],
             dx=init_start._temp_optics_data["dx"],
             dy=init_start._temp_optics_data["dy"],
             dpx=init_start._temp_optics_data["dpx"],
@@ -231,10 +247,6 @@ class Segment:
             beta22=init_end._temp_optics_data["bety"],
             alfa11=init_end._temp_optics_data["alfx"],
             alfa22=init_end._temp_optics_data["alfy"],
-            betx=init_end._temp_optics_data["betx"],
-            bety=init_end._temp_optics_data["bety"],
-            alfx=init_end._temp_optics_data["alfx"],
-            alfy=init_end._temp_optics_data["alfy"],
             dx=init_end._temp_optics_data["dx"],
             dy=init_end._temp_optics_data["dy"],
             dpx=init_end._temp_optics_data["dpx"],
@@ -253,9 +265,6 @@ class Segment:
             method=4,
             chrom=True,
             coupling=True,
-            # nslice=3,
-            # implicit=True,
-            # save="atbody",
             range=f"'{self.start_bpm.upper()}/{self.end_bpm.upper()}'",
         )
 
@@ -267,9 +276,6 @@ class Segment:
             method=4,
             chrom=True,
             coupling=True,
-            # nslice=3,
-            # implicit=True,
-            # save="atbody",
             range=f"'{self.end_bpm.upper()}/{self.start_bpm.upper()}'",
         )
 
@@ -367,7 +373,7 @@ class Segment:
         }
         return res
 
-    def get_phase_diffs(
+    def phase_diffs(
         self, bpms_x=None, bpms_y=None, tw_init_front=None, tw_init_back=None
     ) -> tuple[xt.TwissTable, xt.TwissTable]:
         tw_front = self.twiss_sbs(tw_init_front)
@@ -510,7 +516,7 @@ class Segment:
 
         return (xt.TwissTable(resx), xt.TwissTable(resy))
 
-    def get_disp_diffs(
+    def disp_diffs(
         self, bpms_x=None, bpms_y=None, tw_init_front=None, tw_init_back=None
     ) -> tuple[xt.TwissTable, xt.TwissTable]:
         resx = {}
@@ -566,6 +572,7 @@ class Segment:
         resx["name"] = tw_front.rows[bpms_x[0]].name
         resx["s"] = tw_front.rows[bpms_x[0]].s
         resx["dx"] = tw_front.rows[bpms_x[0]].dx
+        resx["dpx"] = tw_front.rows[bpms_x[0]].dpx
         resx["ndx"] = tw_front.rows[bpms_x[0]].dx / np.sqrt(
             tw_front.rows[bpms_x[0]].betx
         )
@@ -574,6 +581,7 @@ class Segment:
         )
         resx["dx_diff_err"] = np.sqrt(mes_dispx_std**2 + normal_prop_dx_err**2)
         resx["dx_back"] = tw_back.rows[bpms_x[0]].dx
+        resx["dpx_back"] = tw_back.rows[bpms_x[0]].dpx
         resx["ndx_back"] = tw_back.rows[bpms_x[0]].dx / np.sqrt(
             tw_back.rows[bpms_x[0]].betx
         )
@@ -585,6 +593,7 @@ class Segment:
         resy["name"] = tw_front.rows[bpms_y[0]].name
         resy["s"] = tw_front.rows[bpms_y[0]].s
         resy["dy"] = tw_front.rows[bpms_y[0]].dy
+        resy["dpy"] = tw_front.rows[bpms_y[0]].dpy
         resy["ndy"] = tw_front.rows[bpms_y[0]].dy / np.sqrt(
             tw_front.rows[bpms_y[0]].bety
         )
@@ -593,6 +602,7 @@ class Segment:
         )
         resy["dy_diff_err"] = np.sqrt(mes_dispy_std**2 + normal_prop_dy_err**2)
         resy["dy_back"] = tw_back.rows[bpms_y[0]].dy
+        resy["dpy_back"] = tw_back.rows[bpms_y[0]].dpy
         resy["ndy_back"] = tw_back.rows[bpms_y[0]].dy / np.sqrt(
             tw_back.rows[bpms_y[0]].bety
         )
@@ -603,7 +613,32 @@ class Segment:
 
         return (xt.TwissTable(resx), xt.TwissTable(resy))
 
-    def plot_phase_diff(self, bpms_x=None, bpms_y=None, tw_cor=None):
+    def phase_cor(self, bpms_x=None, bpms_y=None, tw_cor=None):
+        '''
+            Calculate phase difference and correction prediction
+        '''
+        tw_sbs = self.twiss_sbs()
+        tw_phase = self.phase_diffs(bpms_x=bpms_x, bpms_y=bpms_y)
+        phasex_df = _phase_difference(tw_cor.rows[bpms_x[0]].mux, tw_sbs.rows[bpms_x[0]].mux)
+        phasey_df = _phase_difference(tw_cor.rows[bpms_y[0]].muy, tw_sbs.rows[bpms_y[0]].muy)
+
+        resx = {}
+        resy = {}
+        
+        resx["name"] = tw_sbs.rows[bpms_x[0]].name
+        resx["s"] = tw_sbs.rows[bpms_x[0]].s
+        resx["dmux"] = tw_phase[0].dmux
+        resx["cor_mux"] = phasex_df
+        
+        
+        resy["name"] = tw_sbs.rows[bpms_y[0]].name
+        resy["s"] = tw_sbs.rows[bpms_y[0]].s
+        resy["dmuy"] = tw_phase[1].dmuy
+        resy["cor_muy"] = phasey_df
+        
+        return (xt.TwissTable(resx), xt.TwissTable(resy))
+
+    def plot_phase_diff(self, bpms_x=None, bpms_y=None, tw_cor=None, tw_mu=None):
 
         if bpms_x is None and bpms_y is None:
             bpms_names = self.get_s_and_bpms(attr="total_phase_")
@@ -614,55 +649,48 @@ class Segment:
 
         bpms_common = np.intersect1d(bpms_x[0], bpms_y[0])
         tw_sbs = self.twiss_sbs()
-        tw_phase = self.get_phase_diffs(bpms_x=bpms_x, bpms_y=bpms_y)
+        tw_phase = self.phase_diffs(bpms_x=bpms_x, bpms_y=bpms_y)
 
         fig, axs = plt.subplots(
-            3, 1, figsize=(11, 11), sharex=True, height_ratios=[0.5, 1, 1], dpi=300
+            2, 1, figsize=(11, 11), sharex=True, height_ratios=[1, 1], dpi=300
         )
-        axs[0].plot(
-            tw_sbs.rows[bpms_x[0]].s,
-            tw_sbs.rows[bpms_x[0]].x * 1e3,
-            marker="o",
-            ls="-",
-            ms=4,
-            label="x",
-            color="black",
-        )
-        if isinstance(tw_cor, xt.TwissTable):
-            axs[0].plot(
-                tw_cor.rows[bpms_x[0]].s,
-                tw_cor.rows[bpms_x[0]].x * 1e3,
-                marker="o",
-                ls="-",
-                ms=4,
-                label="x",
-                color="red",
-            )
-        elif isinstance(tw_cor, dict):
-            for nlabel, twc in tw_cor.items():
-                axs[0].plot(
-                    twc.rows[bpms_x[0]].s,
-                    twc.rows[bpms_x[0]].x * 1e3,
-                    marker="o",
-                    ls="-",
-                    ms=4,
-                    label=f"{nlabel}, x",
-                )
+        # axs[0].plot(
+        #     tw_sbs.rows[bpms_x[0]].s,
+        #     tw_sbs.rows[bpms_x[0]].x * 1e3,
+        #     marker="o",
+        #     ls="-",
+        #     ms=4,
+        #     label="x",
+        #     color="black",
+        # )
+        # if isinstance(tw_cor, xt.TwissTable):
+        #     axs[0].plot(
+        #         tw_cor.rows[bpms_x[0]].s,
+        #         tw_cor.rows[bpms_x[0]].x * 1e3,
+        #         marker="o",
+        #         ls="-",
+        #         ms=4,
+        #         label="x",
+        #         color="red",
+        #     )
+        # elif isinstance(tw_cor, dict):
+        #     for nlabel, twc in tw_cor.items():
+        #         axs[0].plot(
+        #             twc.rows[bpms_x[0]].s,
+        #             twc.rows[bpms_x[0]].x * 1e3,
+        #             marker="o",
+        #             ls="-",
+        #             ms=4,
+        #             label=f"{nlabel}, x",
+        #         )
 
-        axs[0].set_ylabel("co [mm]")
+        # axs[0].set_ylabel("co [mm]")
 
-        axs_t = axs[0].twiny()
-        axs_t.set_xticks(
-            tw_sbs.rows[bpms_common].s,
-            tw_sbs.rows[bpms_common].name,
-            rotation="vertical",
-        )
-
-        axs_t.set_xlim(axs[0].get_xlim()[0], axs[0].get_xlim()[1])
+        i0 = 0
 
         fig.subplots_adjust(hspace=0)
         for i, PLANE in enumerate(["x", "y"]):
-            axs[i + 1].errorbar(
+            axs[i + i0].errorbar(
                 tw_phase[i].s,
                 getattr(tw_phase[i], f"dmu{PLANE}"),
                 yerr=getattr(tw_phase[i], f"dmu{PLANE}_err"),
@@ -672,10 +700,15 @@ class Segment:
                 color="black",
             )
             if isinstance(tw_cor, xt.TwissTable):
-                axs[i + 1].errorbar(
+                phase_df = _phase_difference(
+                    getattr(tw_cor.rows[bpms[PLANE][0]], f"mu{PLANE.lower()}"),
+                    getattr(tw_sbs.rows[bpms[PLANE][0]], f"mu{PLANE.lower()}"),
+                )
+                axs[i + i0].errorbar(
                     tw_cor.rows[bpms[PLANE][0]].s,
-                    -getattr(tw_sbs.rows[bpms[PLANE][0]], f"mu{PLANE.lower()}")
-                    + getattr(tw_cor.rows[bpms[PLANE][0]], f"mu{PLANE.lower()}"),
+                    # -getattr(tw_sbs.rows[bpms[PLANE][0]], f"mu{PLANE.lower()}")
+                    # + getattr(tw_cor.rows[bpms[PLANE][0]], f"mu{PLANE.lower()}"),
+                    phase_df,
                     marker="o",
                     ls="-",
                     label="Arc Correction",
@@ -683,7 +716,7 @@ class Segment:
                 )
             elif isinstance(tw_cor, dict):
                 for nlabel, twc in tw_cor.items():
-                    axs[i + 1].errorbar(
+                    axs[i + i0].errorbar(
                         twc.rows[bpms[PLANE][0]].s,
                         -getattr(tw_sbs.rows[bpms[PLANE][0]], f"mu{PLANE.lower()}")
                         + getattr(twc.rows[bpms[PLANE][0]], f"mu{PLANE.lower()}"),
@@ -692,9 +725,28 @@ class Segment:
                         label=nlabel,
                     )
 
-            axs[i + 1].set_ylabel(rf"$\Delta\phi_{PLANE}\ [2\pi]$")
+            if isinstance(tw_mu, dict):
+                for nlabel, twc in tw_mu.items():
+                    axs[i + i0].errorbar(
+                        twc[i].rows[bpms[PLANE][0]].s,
+                        getattr(twc[i].rows[bpms[PLANE][0]], f"dmu{PLANE}"),
+                        yerr=getattr(twc[i].rows[bpms[PLANE][0]], f"dmu{PLANE}_err"),
+                        marker="o",
+                        ls="-",
+                        label=nlabel,
+                    )
 
-        for i in range(0, 3):
+            axs[i + i0].set_ylabel(rf"$\Delta\phi_{PLANE}\ [2\pi]$")
+
+        axs_t = axs[0].twiny()
+        axs_t.set_xticks(
+            tw_sbs.rows[bpms_common].s,
+            tw_sbs.rows[bpms_common].name,
+            rotation="vertical",
+        )
+
+        axs_t.set_xlim(axs[0].get_xlim()[0], axs[0].get_xlim()[1])
+        for i in range(0, len(axs)):
             axs[i].grid()
             axs[i].legend()
             axs[i].set_xlabel(r"$s [m]$")
@@ -711,7 +763,7 @@ class Segment:
 
         bpms_common = np.intersect1d(bpms_x[0], bpms_y[0])
         tw_sbs = self.backtwiss_sbs()
-        tw_phase = self.get_phase_diffs(bpms_x=bpms_x, bpms_y=bpms_y)
+        tw_phase = self.phase_diffs(bpms_x=bpms_x, bpms_y=bpms_y)
 
         fig, axs = plt.subplots(
             3, 1, figsize=(11, 11), sharex=True, height_ratios=[0.5, 1, 1], dpi=300
@@ -806,7 +858,7 @@ class Segment:
 
         bpms_common = np.intersect1d(bpms_x[0], bpms_y[0])
         tw_sbs = self.twiss_sbs()
-        tw_phase = self.get_phase_diffs(bpms_x=bpms_x, bpms_y=bpms_y)
+        tw_phase = self.phase_diffs(bpms_x=bpms_x, bpms_y=bpms_y)
 
         fig, axs = plt.subplots(2, 1, figsize=(14, 10.5), sharex=True, dpi=300)
 

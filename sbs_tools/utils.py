@@ -54,6 +54,12 @@ def _get_mes_phase(mes_all, loc0, loc, plane):
     return mes
 
 
+def _phase_difference(mu1, mu2):
+    mu_diff = (mu1 - mu2) % 1
+    mu_diff = np.where(mu_diff > 0.5, mu_diff - 1, mu_diff)
+    return mu_diff
+
+
 def _get_mu_diff(tw, mes_all, loc0, loc, plane):
     mdl_mu = _get_tw_phase(tw, loc0, loc, plane)
     mes_mu = _get_mes_phase(mes_all, loc0, loc, plane)
@@ -76,5 +82,46 @@ def merge_tw(
         res[nv] = tw1[nv]
     for nv in var_names2:
         res[nv] = tw2[nv]
+
+    return TwissTable(res)
+
+
+def coupling_rdts(sbs):
+    """
+    Propagate f1001 and f1010 from bpm to bpm
+    """
+    bpms = sbs.get_common_bpms()
+    tw_bpms = sbs.twiss_sbs().rows[bpms[0]]
+
+    sbetx, sbety = np.sqrt(tw_bpms.betx), np.sqrt(tw_bpms.bety)
+    alfx, alfy = tw_bpms.alfx, tw_bpms.alfy
+
+    N = bpms.shape[1]
+    f1001 = np.zeros(N, dtype=np.complex128)
+    f1010 = np.zeros(N, dtype=np.complex128)
+
+    for i in range(N):
+        try:
+            _, rmat = sbs.get_tw_init(at_ele=bpms[0, i])
+            r11 = rmat[0, 0]
+            r12 = rmat[0, 1]
+            r21 = rmat[1, 0]
+            r22 = rmat[1, 1]
+
+            r = np.array([(r22, -r12), (-r21, r11)])
+            ga = np.array([(1 / sbetx[i], 0), (alfx[i] / sbetx[i], sbetx[i])])
+            gb = np.array([(sbety[i], 0), (-alfy[i] / sbety[i], 1 / sbety[i])])
+            c = r / np.sqrt(1 + np.linalg.det(r))
+            cbar = np.matmul(ga, np.matmul(c, gb))
+            cb = 0.25 / np.sqrt(1 - np.linalg.det(cbar)) * cbar
+
+            f1001[i] = cb[0, 1] - cb[1, 0] + 1j * (cb[0, 0] + cb[1, 1])
+            f1010[i] = -cb[0, 1] - cb[1, 0] + 1j * (cb[0, 0] - cb[1, 1])
+        except:
+            # NOTE: HACKING AROUND
+            f1001[i] = 0
+            f1010[i] = 0
+
+    res = {"name": tw_bpms.name, "s": tw_bpms.s, "f1001": f1001, "f1010": f1010}
 
     return TwissTable(res)
