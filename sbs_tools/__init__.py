@@ -7,7 +7,9 @@ from .response import (
     invert_response,
 )
 
-from .utils import merge_tw
+from .sbs_from_twiss import SegmentFromTwiss
+
+from .utils import merge_tw, get_R_terms
 
 
 __all__ = [

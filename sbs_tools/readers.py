@@ -1,5 +1,11 @@
 import tfs
 
+class OptModel:
+    def __init__(self, foldername, best_knowledge=False) -> None:
+        self.twiss = tfs.read_tfs(f"{foldername}/twiss.dat", index="NAME")
+        
+        if best_knowledge:
+            self.twiss_best = tfs.read_tfs(f"{foldername}/twiss_best_knowledge.dat", index="NAME")
 
 class OptData:
     def __init__(self, foldername, fmt="omc3") -> None:
@@ -42,7 +48,7 @@ class OptData:
             # self.bety_amp = tfs.read_tfs(
             #     f"{foldername}/beta_amplitude_y.tfs", index="NAME"
             # )
-
+            
         else:
             self.x = tfs.read_tfs(f"{foldername}/getCOx.out", index="NAME")
             self.y = tfs.read_tfs(f"{foldername}/getCOy.out", index="NAME")

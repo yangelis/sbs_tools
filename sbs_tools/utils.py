@@ -86,6 +86,42 @@ def merge_tw(
     return TwissTable(res)
 
 
+def get_R_terms(betx, bety, alfx, alfy, f1001r, f1001i, f1010r, f1010i):
+    sqrbx = np.sqrt(betx)
+    sqrby = np.sqrt(bety)
+
+    ga11 = 1 / sqrbx
+    ga12 = 0
+    ga21 = alfx / sqrbx
+    ga22 = sqrbx
+    Ga = np.reshape(np.array([ga11, ga12, ga21, ga22]), (2, 2))
+
+    gb11 = 1 / sqrby
+    gb12 = 0
+    gb21 = alfy / sqrby
+    gb22 = sqrby
+    Gb = np.reshape(np.array([gb11, gb12, gb21, gb22]), (2, 2))
+
+    J = np.reshape(np.array([0, 1, -1, 0]), (2, 2))
+
+    absf1001 = np.sqrt(f1001r**2 + f1001i**2)
+    absf1010 = np.sqrt(f1010r**2 + f1010i**2)
+
+    gamma2 = 1.0 / (1.0 + 4.0 * (absf1001**2 - absf1010**2))
+    c11 = f1001i + f1010i
+    c22 = f1001i - f1010i
+    c12 = -(f1010r - f1001r)
+    c21 = -(f1010r + f1001r)
+    Cbar = np.reshape(2 * np.sqrt(gamma2) * np.array([c11, c12, c21, c22]), (2, 2))
+
+    C = np.dot(np.linalg.inv(Ga), np.dot(Cbar, Gb))
+    jCj = np.dot(J, np.dot(C, -J))
+    c = np.linalg.det(C)
+    r = -c / (c - 1)
+    R = np.transpose(np.sqrt(1 + r) * jCj)
+    return np.ravel(R)
+
+
 def coupling_rdts(sbs):
     """
     Propagate f1001 and f1010 from bpm to bpm
@@ -124,4 +160,32 @@ def coupling_rdts(sbs):
 
     res = {"name": tw_bpms.name, "s": tw_bpms.s, "f1001": f1001, "f1010": f1010}
 
+    return TwissTable(res)
+
+
+def mdl2twiss(mdl):
+    res = {}
+    res['name'] = np.array([b.lower() for b in mdl.index])
+    res['s'] = mdl.S.values
+    res['x'] = mdl.X.values
+    res['y'] = mdl.Y.values
+    res['betx'] = mdl.BETX.values
+    res['bety'] = mdl.BETY.values
+    res['alfx'] = mdl.ALFX.values
+    res['alfy'] = mdl.ALFY.values
+
+    res['mux'] = mdl.MUX.values
+    res['muy'] = mdl.MUY.values
+
+    res['dx'] = mdl.DX.values
+    res['dy'] = mdl.DY.values
+    res['dpx'] = mdl.DPX.values
+    res['dpy'] = mdl.DPY.values
+    
+    # coupling
+    res['r11'] = mdl.R11.values
+    res['r12'] = mdl.R12.values
+    res['r21'] = mdl.R21.values
+    res['r22'] = mdl.R22.values
+    
     return TwissTable(res)
