@@ -15,7 +15,6 @@ from typing import Sequence
 
 
 class Segment:
-
     def __init__(
         self,
         line: xt.Line,
@@ -60,7 +59,6 @@ class Segment:
         for kn, kb in zip(knob_names, knob_base):
             self.line.vars[kn] = 0
             self.line.vars[kb] += self.line.vars[kn]
-
 
     def get_tw_init(self, at_ele: str) -> tuple[xt.TwissInit, np.ndarray]:
         """
@@ -165,7 +163,9 @@ class Segment:
         """
         if tw_init is None:
             tw_init = self.init_start
-        sbs_tw = self.line.twiss(start=self.start_bpm, end=self.end_bpm, init=tw_init,  **kwargs)
+        sbs_tw = self.line.twiss(
+            start=self.start_bpm, end=self.end_bpm, init=tw_init, **kwargs
+        )
 
         return sbs_tw
 
@@ -176,7 +176,9 @@ class Segment:
         if tw_init is None:
             tw_init = self.init_end
         # NOTE: make sure tw_init is correct for backtwiss
-        sbs_tw = self.line.twiss(start=self.start_bpm, end=self.end_bpm, init=tw_init, **kwargs)
+        sbs_tw = self.line.twiss(
+            start=self.start_bpm, end=self.end_bpm, init=tw_init, **kwargs
+        )
 
         return sbs_tw
 
@@ -547,6 +549,11 @@ class Segment:
             self.mes.data_dx.loc[bpms_x[1]].DX.values - tw_front.rows[bpms_x[0]].dx
         )
         resx["dx_diff_err"] = np.sqrt(mes_dispx_std**2 + normal_prop_dx_err**2)
+        resx["ndx_diff"] = (
+            self.mes.data_dx.loc[bpms_x[1]].DX.values / np.sqrt(tw_front.rows[bpms_x[0]].betx)
+            - resx["ndx"]
+        )
+
         resx["dx_back"] = tw_back.rows[bpms_x[0]].dx
         resx["dpx_back"] = tw_back.rows[bpms_x[0]].dpx
         resx["ndx_back"] = tw_back.rows[bpms_x[0]].dx / np.sqrt(
@@ -568,6 +575,10 @@ class Segment:
             self.mes.data_dy.loc[bpms_y[1]].DY.values - tw_front.rows[bpms_y[0]].dy
         )
         resy["dy_diff_err"] = np.sqrt(mes_dispy_std**2 + normal_prop_dy_err**2)
+        resy["ndy_diff"] = (
+            self.mes.data_dy.loc[bpms_y[1]].DY.values / np.sqrt(tw_front.rows[bpms_y[0]].bety)
+            - resy["ndy"]
+        )
         resy["dy_back"] = tw_back.rows[bpms_y[0]].dy
         resy["dpy_back"] = tw_back.rows[bpms_y[0]].dpy
         resy["ndy_back"] = tw_back.rows[bpms_y[0]].dy / np.sqrt(
@@ -581,32 +592,34 @@ class Segment:
         return (xt.TwissTable(resx), xt.TwissTable(resy))
 
     def phase_cor(self, bpms_x=None, bpms_y=None, tw_cor=None):
-        '''
-            Calculate phase difference and correction prediction
-        '''
+        """
+        Calculate phase difference and correction prediction
+        """
         tw_sbs = self.twiss_sbs()
         tw_phase = self.phase_diffs(bpms_x=bpms_x, bpms_y=bpms_y)
-        phasex_df = _phase_difference(tw_cor.rows[bpms_x[0]].mux, tw_sbs.rows[bpms_x[0]].mux)
-        phasey_df = _phase_difference(tw_cor.rows[bpms_y[0]].muy, tw_sbs.rows[bpms_y[0]].muy)
+        phasex_df = _phase_difference(
+            tw_cor.rows[bpms_x[0]].mux, tw_sbs.rows[bpms_x[0]].mux
+        )
+        phasey_df = _phase_difference(
+            tw_cor.rows[bpms_y[0]].muy, tw_sbs.rows[bpms_y[0]].muy
+        )
 
         resx = {}
         resy = {}
-        
+
         resx["name"] = tw_sbs.rows[bpms_x[0]].name
         resx["s"] = tw_sbs.rows[bpms_x[0]].s
         resx["dmux"] = tw_phase[0].dmux
         resx["cor_mux"] = phasex_df
-        
-        
+
         resy["name"] = tw_sbs.rows[bpms_y[0]].name
         resy["s"] = tw_sbs.rows[bpms_y[0]].s
         resy["dmuy"] = tw_phase[1].dmuy
         resy["cor_muy"] = phasey_df
-        
+
         return (xt.TwissTable(resx), xt.TwissTable(resy))
 
     def plot_phase_diff(self, bpms_x=None, bpms_y=None, tw_cor=None, tw_mu=None):
-
         if bpms_x is None and bpms_y is None:
             bpms_names = self.get_s_and_bpms(attr="total_phase_")
             bpms_x = bpms_names["bpms_x"]
@@ -720,7 +733,6 @@ class Segment:
         plt.show()
 
     def plot_phase_back_diff(self, bpms_x=None, bpms_y=None, tw_cor=None):
-
         if bpms_x is None and bpms_y is None:
             bpms_names = self.get_s_and_bpms(attr="total_phase_")
             bpms_x = bpms_names["bpms_x"]
@@ -817,7 +829,6 @@ class Segment:
         plt.show()
 
     def plot_phase_diff_fb(self, bpms_x=None, bpms_y=None):
-
         if bpms_x is None and bpms_y is None:
             bpms_names = self.get_s_and_bpms(attr="total_phase_")
             bpms_x = bpms_names["bpms_x"]
