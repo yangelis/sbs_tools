@@ -74,6 +74,9 @@ def create_response(
         _create_res_array(bpms.shape[1], nknobs)
     )
 
+    xs = np.zeros(shape=(bpms.shape[1], nknobs), dtype=np.float64)
+    ys = np.zeros(shape=(bpms.shape[1], nknobs), dtype=np.float64)
+
     df1001 = np.zeros(shape=(bpms.shape[1], nknobs), dtype=np.complex128)
     df1010 = np.zeros(shape=(bpms.shape[1], nknobs), dtype=np.complex128)
 
@@ -105,10 +108,14 @@ def create_response(
             dmuxs,
             dmuys,
         )
+        xs[:, i] = tw_dk.rows[bpms[0, :]].x
+        ys[:, i] = tw_dk.rows[bpms[0, :]].y
         df1001[:, i] = tw_cpl.f1001 - tw_mdl_cpl.f1001
         df1010[:, i] = tw_cpl.f1010 - tw_mdl_cpl.f1010
 
     return {
+        "X": xs,
+        "Y": ys,
         "BETX": betax,
         "BETY": betay,
         "DBETX": betabeatx,
