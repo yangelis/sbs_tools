@@ -3,12 +3,12 @@ import tfs
 class OptModel:
     def __init__(self, foldername, best_knowledge=False) -> None:
         self.twiss = tfs.read_tfs(f"{foldername}/twiss.dat", index="NAME")
-        
+
         if best_knowledge:
             self.twiss_best = tfs.read_tfs(f"{foldername}/twiss_best_knowledge.dat", index="NAME")
 
 class OptData:
-    def __init__(self, foldername, fmt="omc3") -> None:
+    def __init__(self, foldername, fmt="omc3", rdt=False) -> None:
         self.name = foldername.split("/")[-1]
         self.has_dispersion = False
         if fmt == "omc3":
@@ -48,7 +48,20 @@ class OptData:
             # self.bety_amp = tfs.read_tfs(
             #     f"{foldername}/beta_amplitude_y.tfs", index="NAME"
             # )
-            
+            # normal quadrupole
+            self.f2000_x = tfs.read_tfs(f"{foldername}/rdt/normal_quadrupole/f2000_x.tfs", index="NAME")
+            self.f0020_y = tfs.read_tfs(f"{foldername}/rdt/normal_quadrupole/f0020_y.tfs", index="NAME")
+
+            if rdt:
+                # skew quadrupole
+                self.f0110_y = tfs.read_tfs(f"{foldername}/rdt/skew_quadrupole/f0110_y.tfs", index="NAME")
+                self.f1001_x = tfs.read_tfs(f"{foldername}/rdt/skew_quadrupole/f1001_x.tfs", index="NAME")
+                self.f1010_x = tfs.read_tfs(f"{foldername}/rdt/skew_quadrupole/f1010_x.tfs", index="NAME")
+                self.f1010_y = tfs.read_tfs(f"{foldername}/rdt/skew_quadrupole/f1010_y.tfs", index="NAME")
+
+                # decapole
+                self.f0140_y = tfs.read_tfs(f"{foldername}/rdt/normal_decapole/f0140_y.tfs", index="NAME")
+
         else:
             self.x = tfs.read_tfs(f"{foldername}/getCOx.out", index="NAME")
             self.y = tfs.read_tfs(f"{foldername}/getCOy.out", index="NAME")
